@@ -8,6 +8,7 @@ import { addDays, localDate, todayIn } from '../domain/dates';
 import { shiftInstants } from '../domain/instants';
 import { displayName } from '../domain/names';
 import { workedMinutes } from '../domain/anomalies';
+import { shownWorkedMinutes } from '../domain/approval';
 import { now } from '../clock';
 import { checkIfMatch } from '../middleware/etag';
 import { audit } from './audit';
@@ -46,7 +47,7 @@ export function timeEntryDto(e: any, corrections?: any[]) {
     clockInAt: e.clock_in_at,
     clockOutAt: e.clock_out_at,
     breakMinutes: e.break_minutes,
-    workedMinutes: workedMinutes(new Date(e.clock_in_at), e.clock_out_at ? new Date(e.clock_out_at) : null, e.break_minutes),
+    workedMinutes: shownWorkedMinutes(e, workedMinutes(new Date(e.clock_in_at), e.clock_out_at ? new Date(e.clock_out_at) : null, e.break_minutes)),
     sourceIn: e.source_in,
     sourceOut: e.source_out,
     anomalies: e.anomalies ?? [],

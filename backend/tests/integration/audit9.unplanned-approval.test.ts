@@ -130,9 +130,18 @@ describe('SPEC 1.12: unplanned clock-in needs a reason and supervisor approval',
     const rej = await M1().patch(`/attendance/${id}/approval`, { status: 'rejected', note: 'Not agreed with the supervisor' });
     expect(rej.body).toMatchObject({ approvalStatus: 'rejected', approvalNote: 'Not agreed with the supervisor' });
     expect((await as(w.tokens.maria).get('/employees/me/time-account?from=2026-10&to=2026-10')).body.months[0].workedHours).toBe(0);
-    expect((await M1().get(`/hotels/${w.h1}/payroll-export?month=2026-10&format=json`)).body.data[0]).toMatchObject({ workedMinutes: 0, unapprovedEntries: 1 });
+    // a rejected entry shows no hours, is not an open item and raises no payroll warning
+    const payroll = (await M1().get(`/hotels/${w.h1}/payroll-export?month=2026-10&format=json`)).body;
+    expect(payroll.data[0]).toMatchObject({ workedMinutes: 0, unapprovedEntries: 0 });
+    expect(payroll.warnings).not.toContain('entries_pending_approval');
+    expect(rej.body.workedMinutes).toBe(0);
+    expect((await as(w.tokens.maria).get(`/attendance?from=2026-10-01&to=2026-10-31`)).body.data.reduce((a: number, e: any) => a + (e.workedMinutes ?? 0), 0)).toBe(0);
+    expect((await M1().get(`/attendance/export?hotelId=${w.h1}&from=2026-10-01&to=2026-10-31&format=csv`)).text).toMatch(/,0,.*rejected/); // workedMinutes column is 0
+    expect((await M1().get(`/hotels/${w.h1}/analytics/attendance?from=2026-10-01&to=2026-10-31`)).body.byEmployee[0]).toMatchObject({ actualPaidHours: 0, entriesAwaitingApproval: 0 });
     expect((await M1().patch(`/attendance/${id}/approval`, { status: 'rejected', note: 'again' })).body.error.code).toBe('INVALID_STATUS_TRANSITION');
-    expect((await M1().patch(`/attendance/${id}/approval`, { status: 'approved' })).status).toBe(200); // revised
+    const revised = await M1().patch(`/attendance/${id}/approval`, { status: 'approved' }); // revised
+    expect(revised.status).toBe(200);
+    expect(revised.body.workedMinutes).toBe(270); // the hours are back once approved
     expect((await as(w.tokens.maria).get('/employees/me/time-account?from=2026-10&to=2026-10')).body.months[0].workedHours).toBe(4.5);
     expect((await M1().patch(`/attendance/${id}/approval`, { status: 'rejected', note: 'wrong' })).status).toBe(200); // and back
   });

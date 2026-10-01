@@ -6,7 +6,7 @@ import { monthRange } from '../domain/dates';
 import { toCsv } from '../domain/csv';
 import { supplementMinutes } from '../domain/supplements';
 import { workedMinutes } from '../domain/anomalies';
-import { countsAsWorked } from '../domain/approval';
+import { countsAsWorked, shownWorkedMinutes } from '../domain/approval';
 import { Hotel, loadHotel } from './access';
 import { creditsFor } from './credits';
 import { computeMonths } from './timeAccount';
@@ -40,7 +40,7 @@ export interface PayrollRow {
   sundayMinutes: number;
   holidayMinutes: number;
   openOrReviewEntries: number;
-  /** closed entries of unplanned work still waiting for / refused by a supervisor: NOT included in the worked minutes */
+  /** closed entries of unplanned work still waiting for a supervisor's decision: NOT included in the worked minutes (rejected ones are not counted at all) */
   unapprovedEntries: number;
   /** null for hourly workers (no time account) */
   timeAccountDeltaMinutes: number | null;
@@ -80,7 +80,9 @@ export async function payrollRows(db: Db, hotel: Hotel, month: string): Promise<
         continue;
       }
       if (!countsAsWorked(te)) {
-        unapproved++; // SPEC 1.12: only approved hours are paid
+        // SPEC 1.12: only approved hours are paid. Pending entries are reported (a decision is still due);
+        // rejected ones are final: no hours, no open item, no warning.
+        if (te.approval_status === 'pending') unapproved++;
         continue;
       }
       worked += workedMinutes(new Date(te.clock_in_at), new Date(te.clock_out_at), te.break_minutes) ?? 0;
@@ -225,7 +227,7 @@ export async function attendanceExport(db: Db, ctx: AuthContext, hotelId: number
     clockIn: new Date(te.clock_in_at).toISOString(),
     clockOut: te.clock_out_at ? new Date(te.clock_out_at).toISOString() : '',
     breakMinutes: te.break_minutes,
-    workedMinutes: workedMinutes(new Date(te.clock_in_at), te.clock_out_at ? new Date(te.clock_out_at) : null, te.break_minutes) ?? '',
+    workedMinutes: shownWorkedMinutes(te, workedMinutes(new Date(te.clock_in_at), te.clock_out_at ? new Date(te.clock_out_at) : null, te.break_minutes)) ?? '',
     anomalies: (te.anomalies ?? []).map((a: any) => a.type).join('|'),
     status: te.status,
     approvalStatus: te.approval_status,
