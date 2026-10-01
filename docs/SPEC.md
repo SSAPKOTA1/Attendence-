@@ -76,6 +76,16 @@ Clock-in on a **shared hotel tablet** with **name + PIN only**; **automatic dedu
 | Supplements | New **Saturday** supplement (`saturdayMinutes`, wage type `saturday`). The unpaid break is **deducted automatically** from night, Saturday, Sunday and holiday minutes, proportionally (worked ÷ gross) because the break time of day is not recorded |
 | Shift design | Shift templates are designed in the app (`POST/PATCH/DELETE /shifts`) by **admins only** (1.9); managers read them and assign them in the roster; the seed shifts are examples only |
 
+### 1.11 Data-integrity rules found by the audit
+| Rule | Behaviour |
+|---|---|
+| Shift in use | Start time, end time, break and department of a shift that any roster entry references can no longer be changed (`409 RESOURCE_IN_USE`); only the name can. Create a new shift for different times. This keeps rosters, rest-period checks and past payroll months stable |
+| Departments of an employee | Cannot be removed while the employee has future roster entries on shifts of that department (`409 RESOURCE_IN_USE`) |
+| Termination | Setting an employee `terminated` is refused while roster entries after the termination date exist; `removeFutureEntries: true` deletes them (audited). The entries on the termination date itself stay |
+| Paid public holidays | Credited only between `hiredOn` and `terminatedOn` |
+| Anonymisation | Also deletes the employee's inquiries (free text may contain personal data) |
+| Daylight saving | A local time that occurs twice (02:00–02:59 on the autumn change) means the later occurrence, exactly as in PostgreSQL's `AT TIME ZONE`, so the service and the database trigger always agree |
+
 ### 1.10 Adding and deleting employees: admin only
 Creating (`E3`) and deleting (`E5`) employees is restricted to admins (`403 FORBIDDEN` for managers). Managers of the home hotel still edit master data, targets, hotel assignments, PINs and absences.
 

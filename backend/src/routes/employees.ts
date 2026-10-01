@@ -38,6 +38,7 @@ const employeeBody = z.object({
   // owner decision: chosen when the employee is created (salaried → time account, hourly → paid per hour)
   payType: z.enum(['salary', 'hourly']),
   publicHolidaysOff: z.boolean().default(true),
+  removeFutureEntries: z.boolean().optional(),
   homeHotelId: z.number().int().positive(),
   hotelIds: z.array(z.number().int().positive()).optional(),
   departmentIds: z.array(z.number().int().positive()).optional(),

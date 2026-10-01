@@ -10,6 +10,7 @@ import {
   RESET_TTL_MS, signAccessToken, verifySecret, randomToken,
 } from './tokens';
 import { link, mailer } from './mailer';
+import { logger } from '../logger';
 
 const MAX_FAILED_LOGINS = 10;
 const LOCK_MS = 15 * 60_000;
@@ -189,11 +190,10 @@ export async function forgotPassword(db: Db, email: string, requestId: string) {
   }
   const { token } = await createUserToken(db, u.id, 'password_reset', RESET_TTL_MS);
   await audit(db, { userId: u.id, companyId: u.company_id, requestId }, { action: 'auth.forgot_password', entityType: 'user', entityId: u.id });
-  try {
-    await mailer.send({ to: u.email, subject: 'Password reset / Passwort zurücksetzen', text: `Reset your password: ${link('reset-password', token)}` });
-  } catch {
-    /* the response must not differ; a failed mail is logged by the transport */
-  }
+  // not awaited: the response time must not reveal whether the account exists (an SMTP round trip would)
+  mailer
+    .send({ to: u.email, subject: 'Password reset / Passwort zurücksetzen', text: `Reset your password: ${link('reset-password', token)}` })
+    .catch((err) => logger.warn({ err, userId: u.id }, 'password reset mail failed'));
 }
 
 export async function resetPassword(token: string, password: string, requestId: string) {

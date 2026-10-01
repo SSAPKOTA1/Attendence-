@@ -13,7 +13,7 @@ import { gapsBetweenParts } from '../domain/restPeriod';
 import { now } from '../clock';
 import { audit, sha256 } from './audit';
 import { Hotel, loadHotel, resolveHotelId } from './access';
-import { randomToken, verifySecret } from './tokens';
+import { burnTime, randomToken, verifySecret } from './tokens';
 import { managerIdsOfHotel, notify } from './notifications';
 
 const PAIRING_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -208,7 +208,7 @@ export async function verifyPin(device: DeviceContext, employeeId: number, pin: 
     );
     const pinRow = emp ? await maybeOne(db, 'SELECT * FROM employee_pins WHERE employee_id = $1 FOR UPDATE', [employeeId]) : null;
     if (!emp || !pinRow) {
-      await verifySecret(pin, '$2a$04$invalidinvalidinvalidinvalidinvalidinvalidinvalidinva');
+      await burnTime(pin); // same duration as a real check: no timing difference between "no PIN / not assigned" and "wrong PIN"
       throw await genericInvalidPin(hotel);
     }
     const actx = { userId: null as any, companyId: hotel.companyId, requestId };

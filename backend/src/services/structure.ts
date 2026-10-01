@@ -153,6 +153,18 @@ export async function updateShift(
   const end = input.endTime ?? s.end_time;
   const brk = input.breakDurationMinutes ?? s.break_duration_minutes;
   validateShiftTimes(start, end, brk);
+  // Times, break and department define what every roster entry (and every payroll month) built on this shift means.
+  // Changing them under existing entries would silently create overlaps/rest violations and rewrite past hours, so a
+  // shift that is in use can only be renamed: create a new shift instead.
+  const definitionChanged = start !== s.start_time || end !== s.end_time || brk !== s.break_duration_minutes || departmentId !== s.department_id;
+  if (definitionChanged) {
+    const used = await maybeOne(db, 'SELECT count(*)::int AS n FROM schedules WHERE shift_id = $1', [id]);
+    if (used.n > 0) {
+      throw new AppError('RESOURCE_IN_USE', {
+        details: [{ field: 'shiftId', issue: `the shift is used by ${used.n} roster entries; only the name can be changed, create a new shift for different times`, entries: used.n }],
+      });
+    }
+  }
   const hotel = await loadHotel(db, s.hotel_id);
   const r = await maybeOne(
     db,

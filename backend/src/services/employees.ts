@@ -23,6 +23,8 @@ export interface EmployeeInput {
   attendanceRequired?: boolean;
   payType?: 'salary' | 'hourly';
   publicHolidaysOff?: boolean;
+  /** with a termination: delete roster entries after the termination date instead of refusing */
+  removeFutureEntries?: boolean;
   homeHotelId: number;
   hotelIds?: number[];
   departmentIds?: number[];
@@ -100,6 +102,21 @@ function validateBirthDate(birthDate: string | null | undefined) {
   if (!birthDate) return;
   if (ageOn(birthDate, today()) < 15) {
     throw new AppError('VALIDATION_ERROR', { details: [{ field: 'birthDate', issue: 'employees must be at least 15 years old' }] });
+  }
+}
+
+/** Departments cannot be taken away from an employee who still has future roster entries on shifts of that department. */
+async function assertDepartmentsNotInUse(db: Db, employeeId: number, newDepartmentIds: number[]) {
+  const inUse = await rows(
+    db,
+    `SELECT DISTINCT sh.department_id FROM schedules s JOIN shifts sh ON sh.id = s.shift_id
+      WHERE s.employee_id = $1 AND s.date >= $2::date AND s.entry_type = 'shift' AND NOT (sh.department_id = ANY($3::bigint[]))`,
+    [employeeId, today(), newDepartmentIds],
+  );
+  if (inUse.length > 0) {
+    throw new AppError('RESOURCE_IN_USE', {
+      details: inUse.map((r) => ({ field: 'departmentIds', issue: `future roster entries exist for department ${r.department_id}`, departmentId: r.department_id })),
+    });
   }
 }
 
@@ -226,11 +243,32 @@ export async function updateEmployee(db: Db, ctx: AuthContext, id: string | numb
       pick('payType', 'pay_type'), pick('publicHolidaysOff', 'public_holidays_off')],
   );
   if (input.departmentIds) {
+    await assertDepartmentsNotInUse(db, e.id, input.departmentIds);
     await db.query('DELETE FROM employee_departments WHERE employee_id = $1', [e.id]);
     await insertDepartments(db, e.id, [...new Set(input.departmentIds)]);
   }
-  if (updated.status === 'terminated' && updated.terminated_on && updated.terminated_on <= today()) {
-    await deactivateTerminated(db, e.id);
+  if (updated.status === 'terminated' && updated.terminated_on) {
+    // roster entries after the last working day would still count as coverage and block publishing
+    const future = await rows(
+      db,
+      'SELECT id, hotel_id, date, status FROM schedules WHERE employee_id = $1 AND date > $2::date ORDER BY date, id',
+      [e.id, updated.terminated_on],
+    );
+    if (future.length > 0) {
+      if (!input.removeFutureEntries) {
+        throw new AppError('RESOURCE_IN_USE', {
+          details: [{ field: 'status', issue: `${future.length} roster entries after the termination date exist; remove them first or send removeFutureEntries: true`, entries: future.length }],
+        });
+      }
+      await db.query('DELETE FROM schedules WHERE id = ANY($1::bigint[])', [future.map((f) => f.id)]);
+      for (const f of future) {
+        await audit(db, ctx, {
+          action: 'schedule.delete', entityType: 'schedule', entityId: f.id, hotelId: f.hotel_id,
+          before: { date: f.date, status: f.status }, meta: { cause: 'employee_terminated', employeeId: e.id },
+        });
+      }
+    }
+    if (updated.terminated_on <= today()) await deactivateTerminated(db, e.id);
   }
   await audit(db, ctx, {
     action: 'employee.update', entityType: 'employee', entityId: e.id, hotelId: access.homeHotelId,
@@ -337,6 +375,7 @@ export async function putHotels(db: Db, ctx: AuthContext, id: string | number, i
   await db.query('UPDATE employee_hotels SET is_home = true WHERE employee_id = $1 AND hotel_id = $2', [employeeId, input.homeHotelId]);
   if (input.departmentIds) {
     await assertDepartments(db, input.departmentIds, newIds);
+    await assertDepartmentsNotInUse(db, employeeId, input.departmentIds);
     await db.query('DELETE FROM employee_departments WHERE employee_id = $1', [employeeId]);
     await insertDepartments(db, employeeId, [...new Set(input.departmentIds)]);
   }
