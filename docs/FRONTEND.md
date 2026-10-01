@@ -6,7 +6,7 @@ app-specific layout lives in `src/styles/app.css`). No UI framework, no CSS-in-J
 
 > This replaces the earlier plan that proposed three separate apps and a monorepo. One bundle with three route areas is simpler to
 > build, test and deploy, and every area shares the same auth, API client and i18n. Code-splitting keeps each area's JS small
-> (main chunk 79 kB gzipped).
+> (main chunk 65 kB gzipped).
 
 ## Areas
 
