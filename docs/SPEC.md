@@ -74,7 +74,10 @@ Clock-in on a **shared hotel tablet** with **name + PIN only**; **automatic dedu
 |---|---|
 | Payroll product | **LODAS** confirmed. `payroll.datev.product` defaults to `lodas` and the LODAS templates are pre-filled; only consultant/client numbers and wage types remain to be entered (still verify against the payroll office's sample) |
 | Supplements | New **Saturday** supplement (`saturdayMinutes`, wage type `saturday`). The unpaid break is **deducted automatically** from night, Saturday, Sunday and holiday minutes, proportionally (worked ÷ gross) because the break time of day is not recorded |
-| Shift design | Shift templates are designed in the app (`POST/PATCH/DELETE /shifts`) by admins and managers; the seed shifts are examples only |
+| Shift design | Shift templates are designed in the app (`POST/PATCH/DELETE /shifts`) by **admins only** (1.9); managers read them and assign them in the roster; the seed shifts are examples only |
+
+### 1.9 Shift templates: admin only
+Creating, editing and deleting shift templates (`S2`–`S4`) is restricted to admins (`403 FORBIDDEN` for managers). Managers still read shifts, set staffing requirements and roster employees onto shifts.
 
 ### 1.8 Salaried vs hourly, public holidays per employee (owner decisions)
 | Topic | Rule |
@@ -400,7 +403,8 @@ Creating annual leave needing more than `remaining` in any affected year → `42
 | See employees assigned to my hotel, floating staff included (name, status, availability) | ✗ | ✓ | ✓ |
 | Assign/unassign an employee to a hotel | ✗ | ✓ if all hotels involved are in the access set | ✓ |
 | Delete another hotel's `off` entry for a floating employee | ✗ | ✓ if the employee is assigned to my hotel | ✓ |
-| Departments, shifts, staffing requirements | ✗ | ✓ | ✓ |
+| Departments, staffing requirements | ✗ | ✓ | ✓ |
+| Shift templates (create/edit/delete) | ✗ | ✗ | ✓ |
 | Roster: create/edit/delete/bulk/copy/publish, see drafts | ✗ | ✓ | ✓ |
 | Approve/reject absences, wishes, corrections; manual time entries | ✗ | ✓ | ✓ |
 | Kiosk pairing/devices, period lock (forward only) | ✗ | ✓ | ✓ |
@@ -456,9 +460,9 @@ Role: **P** public, **S** staff and up, **M** manager and up, **A** admin, **D**
 | D3 | PATCH | /departments/:id | M | 2 |
 | D4 | DELETE | /departments/:id | M | 2 |
 | S1 | GET | /shifts | S | 2 |
-| S2 | POST | /shifts | M | 2 |
-| S3 | PATCH | /shifts/:id | M | 2 |
-| S4 | DELETE | /shifts/:id | M | 2 |
+| S2 | POST | /shifts | A | 2 |
+| S3 | PATCH | /shifts/:id | A | 2 |
+| S4 | DELETE | /shifts/:id | A | 2 |
 | S5 | GET | /shifts/:id/staffing-requirements | M | 2 |
 | S6 | PUT | /shifts/:id/staffing-requirements | M | 2 |
 | E1 | GET | /employees | M | 3 |

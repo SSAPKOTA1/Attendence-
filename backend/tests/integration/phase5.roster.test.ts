@@ -10,7 +10,7 @@ const M1 = () => as(w.tokens.manager1);
 const M2 = () => as(w.tokens.manager2);
 
 async function mkShift(name: string, startTime: string, endTime: string, breakDurationMinutes: number, departmentId?: number) {
-  const res = await as(w.tokens.regional).post('/shifts', { hotelId: w.h1, departmentId: departmentId ?? w.d1, name, startTime, endTime, breakDurationMinutes });
+  const res = await as(w.tokens.admin).post('/shifts', { hotelId: w.h1, departmentId: departmentId ?? w.d1, name, startTime, endTime, breakDurationMinutes });
   expect(res.status).toBe(201);
   return res.body.id as number;
 }

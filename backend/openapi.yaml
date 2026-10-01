@@ -2253,7 +2253,7 @@ paths:
       tags:
         - Structure
       summary: "S2: Create shift (break warnings)"
-      description: "Role: manager and up."
+      description: "Role: admin."
       security:
         - bearer: []
       requestBody:
@@ -2311,7 +2311,7 @@ paths:
       tags:
         - Structure
       summary: "S3: Update shift"
-      description: "Role: manager and up."
+      description: "Role: admin."
       security:
         - bearer: []
       parameters:
@@ -2381,7 +2381,7 @@ paths:
       tags:
         - Structure
       summary: "S4: Soft-delete (409 with future entries)"
-      description: "Role: manager and up."
+      description: "Role: admin."
       security:
         - bearer: []
       parameters:

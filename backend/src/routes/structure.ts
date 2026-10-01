@@ -51,7 +51,8 @@ const shiftBody = z.object({
   breakDurationMinutes: z.number().int().min(0).max(1439).default(0),
 });
 
-structureRouter.post('/shifts', requireRole('manager'), async (req, res) => {
+// owner decision (SPEC 1.9): shift templates are designed by admins; managers assign them in the roster
+structureRouter.post('/shifts', requireRole('admin'), async (req, res) => {
   const body = parseBody(shiftBody, req);
   const s = await st.createShift(getPool(), req.ctx!, body);
   res.status(201).location(`/api/v1/shifts/${s.id}`).json(s);
@@ -61,12 +62,12 @@ structureRouter.get('/shifts/:id', async (req, res) => {
   res.json(st.shiftDto(await st.loadShift(getPool(), req.ctx!, idParam(req))));
 });
 
-structureRouter.patch('/shifts/:id', requireRole('manager'), async (req, res) => {
+structureRouter.patch('/shifts/:id', requireRole('admin'), async (req, res) => {
   const body = parseBody(shiftBody.omit({ hotelId: true }).partial(), req);
   res.json(await st.updateShift(getPool(), req.ctx!, idParam(req), body));
 });
 
-structureRouter.delete('/shifts/:id', requireRole('manager'), async (req, res) => {
+structureRouter.delete('/shifts/:id', requireRole('admin'), async (req, res) => {
   await st.deleteShift(getPool(), req.ctx!, idParam(req));
   res.status(204).end();
 });

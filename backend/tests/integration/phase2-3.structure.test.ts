@@ -13,7 +13,7 @@ describe('Phase 2: departments, shifts, staffing', () => {
   afterAll(() => closePool());
 
   it('#8 shift 22:00–06:00 with 60 min break', async () => {
-    const res = await as(w.tokens.manager1).post('/shifts', { hotelId: w.h1, departmentId: w.d2, name: 'Night HK', startTime: '22:00', endTime: '06:00', breakDurationMinutes: 60 });
+    const res = await as(w.tokens.admin).post('/shifts', { hotelId: w.h1, departmentId: w.d2, name: 'Night HK', startTime: '22:00', endTime: '06:00', breakDurationMinutes: 60 });
     expect(res.status).toBe(201);
     expect(res.headers.location).toBe(`/api/v1/shifts/${res.body.id}`);
     expect(res.body).toMatchObject({ durationHours: 8, paidHours: 7, breakDurationMinutes: 60, startTime: '22:00', endTime: '06:00' });
@@ -21,7 +21,7 @@ describe('Phase 2: departments, shifts, staffing', () => {
   });
 
   it('#9 break >= duration → 400', async () => {
-    const res = await as(w.tokens.manager1).post('/shifts', { hotelId: w.h1, departmentId: w.d2, name: 'Bad', startTime: '08:00', endTime: '09:00', breakDurationMinutes: 60 });
+    const res = await as(w.tokens.admin).post('/shifts', { hotelId: w.h1, departmentId: w.d2, name: 'Bad', startTime: '08:00', endTime: '09:00', breakDurationMinutes: 60 });
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_ERROR');
   });
@@ -36,9 +36,20 @@ describe('Phase 2: departments, shifts, staffing', () => {
   });
 
   it('#11 8 h shift with 15 min break → 201 + break_insufficient', async () => {
-    const res = await as(w.tokens.manager1).post('/shifts', { hotelId: w.h1, departmentId: w.d3, name: 'Cook', startTime: '08:00', endTime: '16:00', breakDurationMinutes: 15 });
+    const res = await as(w.tokens.admin).post('/shifts', { hotelId: w.h1, departmentId: w.d3, name: 'Cook', startTime: '08:00', endTime: '16:00', breakDurationMinutes: 15 });
     expect(res.status).toBe(201);
     expect(res.body.warnings[0]).toMatchObject({ type: 'break_insufficient', severity: 'warning' });
+  });
+
+  it('SPEC 1.9: only admins design shifts; managers keep reading and assigning them', async () => {
+    const body = { hotelId: w.h1, departmentId: w.d1, name: 'Manager made', startTime: '07:00', endTime: '15:00', breakDurationMinutes: 30 };
+    expect((await as(w.tokens.manager1).post('/shifts', body)).status).toBe(403);
+    expect((await as(w.tokens.manager1).patch(`/shifts/${w.early}`, { name: 'Renamed' })).status).toBe(403);
+    expect((await as(w.tokens.manager1).delete(`/shifts/${w.early}`)).status).toBe(403);
+    expect((await as(w.tokens.manager1).get(`/shifts?hotelId=${w.h1}`)).status).toBe(200);
+    const edited = await as(w.tokens.admin).patch(`/shifts/${w.mid}`, { startTime: '10:30', endTime: '18:30' });
+    expect(edited.status).toBe(200);
+    expect(edited.body).toMatchObject({ startTime: '10:30', endTime: '18:30', paidHours: 7.5 });
   });
 
   it('duplicate department name → 409, staffing requirements round-trip', async () => {
