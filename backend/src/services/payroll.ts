@@ -6,6 +6,7 @@ import { monthRange } from '../domain/dates';
 import { toCsv } from '../domain/csv';
 import { supplementMinutes } from '../domain/supplements';
 import { workedMinutes } from '../domain/anomalies';
+import { countsAsWorked } from '../domain/approval';
 import { Hotel, loadHotel } from './access';
 import { creditsFor } from './credits';
 import { computeMonths } from './timeAccount';
@@ -15,7 +16,7 @@ import { audit } from './audit';
 export const PAYROLL_COLUMNS = [
   'employeeNumber', 'lastName', 'firstName', 'employmentType', 'payType', 'workedMinutes', 'plannedMinutes', 'creditedAnnualMinutes',
   'creditedSickMinutes', 'creditedSchoolMinutes', 'creditedPublicHolidayMinutes', 'absenceDaysAnnual', 'absenceDaysSick', 'absenceDaysUnpaid', 'nightMinutes',
-  'saturdayMinutes', 'sundayMinutes', 'holidayMinutes', 'openOrReviewEntries', 'timeAccountDeltaMinutes',
+  'saturdayMinutes', 'sundayMinutes', 'holidayMinutes', 'openOrReviewEntries', 'unapprovedEntries', 'timeAccountDeltaMinutes',
 ];
 
 export interface PayrollRow {
@@ -39,6 +40,8 @@ export interface PayrollRow {
   sundayMinutes: number;
   holidayMinutes: number;
   openOrReviewEntries: number;
+  /** closed entries of unplanned work still waiting for / refused by a supervisor: NOT included in the worked minutes */
+  unapprovedEntries: number;
   /** null for hourly workers (no time account) */
   timeAccountDeltaMinutes: number | null;
 }
@@ -69,10 +72,15 @@ export async function payrollRows(db: Db, hotel: Hotel, month: string): Promise<
     );
     let worked = 0;
     let open = 0;
+    let unapproved = 0;
     const sup = { nightMinutes: 0, saturdayMinutes: 0, sundayMinutes: 0, holidayMinutes: 0 };
     for (const te of entries) {
       if (te.status !== 'closed') {
         open++;
+        continue;
+      }
+      if (!countsAsWorked(te)) {
+        unapproved++; // SPEC 1.12: only approved hours are paid
         continue;
       }
       worked += workedMinutes(new Date(te.clock_in_at), new Date(te.clock_out_at), te.break_minutes) ?? 0;
@@ -124,6 +132,7 @@ export async function payrollRows(db: Db, hotel: Hotel, month: string): Promise<
       sundayMinutes: Math.round(sup.sundayMinutes),
       holidayMinutes: Math.round(sup.holidayMinutes),
       openOrReviewEntries: open,
+      unapprovedEntries: unapproved,
       timeAccountDeltaMinutes: delta,
     });
   }
@@ -135,7 +144,8 @@ export async function payrollExport(db: Db, ctx: AuthContext, hotelId: number, m
   const hotel = await loadHotel(db, hotelId);
   const data = await payrollRows(db, hotel, month);
   const { to } = monthRange(month);
-  const warnings = !hotel.attendanceLockedUntil || hotel.attendanceLockedUntil < to ? ['period_not_locked'] : [];
+  const warnings: string[] = !hotel.attendanceLockedUntil || hotel.attendanceLockedUntil < to ? ['period_not_locked'] : [];
+  if (data.some((r) => r.unapprovedEntries > 0)) warnings.push('entries_pending_approval');
   await audit(db, ctx, { action: 'payroll.export', entityType: 'hotel', entityId: hotelId, hotelId, meta: { month, format, employees: data.length } });
   if (format === 'json') return { kind: 'json' as const, body: { hotelId, month, warnings, data } };
   if (format === 'csv') return { kind: 'csv' as const, body: toCsv(PAYROLL_COLUMNS, data as any), warnings };
@@ -218,7 +228,8 @@ export async function attendanceExport(db: Db, ctx: AuthContext, hotelId: number
     workedMinutes: workedMinutes(new Date(te.clock_in_at), te.clock_out_at ? new Date(te.clock_out_at) : null, te.break_minutes) ?? '',
     anomalies: (te.anomalies ?? []).map((a: any) => a.type).join('|'),
     status: te.status,
+    approvalStatus: te.approval_status,
   }));
   await audit(db, ctx, { action: 'attendance.export', entityType: 'hotel', entityId: hotelId, hotelId, meta: { from, to, rows: data.length } });
-  return toCsv(['date', 'employeeNumber', 'shift', 'clockIn', 'clockOut', 'breakMinutes', 'workedMinutes', 'anomalies', 'status'], data);
+  return toCsv(['date', 'employeeNumber', 'shift', 'clockIn', 'clockOut', 'breakMinutes', 'workedMinutes', 'anomalies', 'status', 'approvalStatus'], data);
 }

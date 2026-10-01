@@ -6,6 +6,7 @@ import { bradfordFactor, mergeSpells } from '../domain/bradford';
 import { shiftInstants } from '../domain/instants';
 import { toHours } from '../domain/hours';
 import { workedMinutes } from '../domain/anomalies';
+import { countsAsWorked } from '../domain/approval';
 import { now } from '../clock';
 import { loadHotel } from './access';
 import { creditsFor } from './credits';
@@ -197,7 +198,7 @@ export async function attendanceAnalytics(db: Db, ctx: AuthContext, hotelId: num
     [hotelId, q.from, q.to, hotel.timezone],
   );
   const byEmployee = [];
-  const totals = { plannedPaidHours: 0, actualPaidHours: 0, lateCount: 0, earlyLeaveCount: 0, noShowCount: 0, unscheduledCount: 0, overtimeHours: 0, openOrReviewEntries: 0 };
+  const totals = { plannedPaidHours: 0, actualPaidHours: 0, lateCount: 0, earlyLeaveCount: 0, noShowCount: 0, unscheduledCount: 0, overtimeHours: 0, openOrReviewEntries: 0, entriesAwaitingApproval: 0 };
   for (const e of emps) {
     const planned = (
       await maybeOne(
@@ -212,10 +213,12 @@ export async function attendanceAnalytics(db: Db, ctx: AuthContext, hotelId: num
       `SELECT * FROM time_entries WHERE employee_id = $1 AND hotel_id = $2 AND (clock_in_at AT TIME ZONE $5)::date BETWEEN $3 AND $4`,
       [e.id, hotelId, q.from, q.to, hotel.timezone],
     );
-    let actual = 0, late = 0, early = 0, unscheduled = 0, overtime = 0, open = 0;
+    let actual = 0, late = 0, early = 0, unscheduled = 0, overtime = 0, open = 0, awaiting = 0;
     for (const te of entries) {
+      if (te.approval_status === 'pending') awaiting++;
       if (te.status !== 'closed') open++;
-      else actual += workedMinutes(new Date(te.clock_in_at), new Date(te.clock_out_at), te.break_minutes) ?? 0;
+      // unapproved / refused unplanned work has no hours, but its anomalies (late, unscheduled, ...) still count below
+      if (countsAsWorked(te)) actual += workedMinutes(new Date(te.clock_in_at), new Date(te.clock_out_at), te.break_minutes) ?? 0;
       for (const a of te.anomalies ?? []) {
         if (a.type === 'late_clock_in') late++;
         if (a.type === 'early_clock_out') early++;
@@ -235,6 +238,7 @@ export async function attendanceAnalytics(db: Db, ctx: AuthContext, hotelId: num
       unscheduledCount: unscheduled,
       overtimeHours: toHours(overtime),
       openOrReviewEntries: open,
+      entriesAwaitingApproval: awaiting,
     };
     byEmployee.push(row);
     totals.plannedPaidHours += row.plannedPaidHours;
@@ -245,6 +249,7 @@ export async function attendanceAnalytics(db: Db, ctx: AuthContext, hotelId: num
     totals.unscheduledCount += unscheduled;
     totals.overtimeHours += row.overtimeHours;
     totals.openOrReviewEntries += open;
+    totals.entriesAwaitingApproval += awaiting;
   }
   totals.plannedPaidHours = toHours(totals.plannedPaidHours * 60);
   totals.actualPaidHours = toHours(totals.actualPaidHours * 60);
@@ -275,7 +280,7 @@ export async function overview(db: Db, ctx: AuthContext, q: { hotelIds?: number[
         [hotelId, q.from, q.to],
       )
     ).n;
-    const entries = await rows(db, `SELECT * FROM time_entries WHERE hotel_id = $1 AND status = 'closed' AND (clock_in_at AT TIME ZONE $4)::date BETWEEN $2 AND $3`, [hotelId, q.from, q.to, hotel.timezone]);
+    const entries = await rows(db, `SELECT * FROM time_entries WHERE hotel_id = $1 AND status = 'closed' AND approval_status IN ('not_required','approved') AND (clock_in_at AT TIME ZONE $4)::date BETWEEN $2 AND $3`, [hotelId, q.from, q.to, hotel.timezone]);
     const actual = entries.reduce((a, te) => a + (workedMinutes(new Date(te.clock_in_at), new Date(te.clock_out_at), te.break_minutes) ?? 0), 0);
     const emps = await homeEmployees(db, hotelId);
     let sick = 0, shifts = 0;

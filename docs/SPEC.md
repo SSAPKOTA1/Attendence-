@@ -76,6 +76,16 @@ Clock-in on a **shared hotel tablet** with **name + PIN only**; **automatic dedu
 | Supplements | New **Saturday** supplement (`saturdayMinutes`, wage type `saturday`). The unpaid break is **deducted automatically** from night, Saturday, Sunday and holiday minutes, proportionally (worked ÷ gross) because the break time of day is not recorded |
 | Shift design | Shift templates are designed in the app (`POST/PATCH/DELETE /shifts`) by **admins only** (1.9); managers read them and assign them in the roster; the seed shifts are examples only |
 
+### 1.12 Unplanned clock-in: reason and supervisor approval (owner decision)
+| Topic | Rule |
+|---|---|
+| What is "unplanned" | A kiosk `clock_in` for which there is no published, not yet used shift **at this hotel** whose window contains now (R13.5): no shift, a shift only at another hotel, outside the 2 h early window, or during an approved absence |
+| Reason | `POST /kiosk/punch` with `action: clock_in` must carry `reason` (3–500 characters) when unplanned, else `422 UNPLANNED_REASON_REQUIRED`. The refused punch does **not** burn the punch token (the tablet asks for the reason and retries within the 60 s). `POST /kiosk/verify` answers `reasonRequiredForClockIn` so the tablet can ask first. A reason sent for a planned shift is ignored |
+| Approval state | `time_entries.approval_status`: `not_required` (planned shifts, manager-created entries), `pending` (unplanned, from clock-in), `approved`, `rejected`. Fields: `unplannedReason`, `approvedById`, `approvedAt`, `approvalNote` |
+| Hours | Only `closed` entries that are `not_required` or `approved` count as worked hours: time account, work hours on the dashboard, payroll/DATEV, analytics hours. Pending and rejected entries show in `payroll-export` as `unapprovedEntries` (JSON warning `entries_pending_approval`, header `X-Warnings`) and in analytics as `entriesAwaitingApproval`; anomalies of such entries still count |
+| Decision | `PATCH /attendance/:id/approval { status: approved | rejected, note }` (AT12): managers of the entry's hotel and admins. The entry must be closed (a forgotten clock-out is first closed by a correction). Rejection needs a note. Decisions can be revised (approved ⇄ rejected). Nobody decides their own hours except an admin. The payroll period lock applies (`423 PERIOD_LOCKED`, admin with a note overrides, audited) |
+| Notifications | `time_approval_requested` to the hotel's managers when the hours become final (clock-out); `time_approval_decided` to the employee (ids only, never the note); live board `awaitingApproval` |
+
 ### 1.11 Data-integrity rules found by the audit
 | Rule | Behaviour |
 |---|---|
@@ -356,7 +366,7 @@ Creating annual leave needing more than `remaining` in any affected year → `42
 
 ### R17. Notifications
 - In-app notifications for every user; e-mail optional per kind if the user has an e-mail address and the preference allows it. Users without e-mail receive in-app notifications only.
-- **Kinds and recipients:** `roster_published` (employees with published entries in the range, one per publish), `roster_entry_changed` / `roster_entry_removed` (employee, published entries only, immediate, `urgent` inside the notice window), `absence_decided`, `wish_decided`, `correction_decided`, `inquiry_reply` (employee); `inquiry_new`, `absence_requested`, `wish_submitted`, `correction_requested`, `needs_review_entry`, `sick_reported` (managers whose access set contains the relevant hotel; absences go to the home hotel).
+- **Kinds and recipients:** `roster_published` (employees with published entries in the range, one per publish), `roster_entry_changed` / `roster_entry_removed` (employee, published entries only, immediate, `urgent` inside the notice window), `absence_decided`, `wish_decided`, `correction_decided`, `inquiry_reply` (employee); `inquiry_new`, `absence_requested`, `wish_submitted`, `correction_requested`, `needs_review_entry`, `sick_reported`, `time_approval_requested` (managers whose access set contains the relevant hotel; absences go to the home hotel); `time_approval_decided` (employee).
 - **Content:** `kind`, `params` (ids and dates only, never health details), `entityType`, `entityId`; the client renders the text in the user's language. E-mails carry a generic text and a link, never the content.
 - **Defaults:** e-mail on for entry changed/removed, decisions, replies and `sick_reported`; off for the rest. A job sends due e-mails every minute (retry 3 times).
 
@@ -420,7 +430,7 @@ Creating annual leave needing more than `remaining` in any affected year → `42
 | Shift templates (create/edit/delete) | ✗ | ✗ | ✓ |
 | Add / delete employees | ✗ | ✗ | ✓ |
 | Roster: create/edit/delete/bulk/copy/publish, see drafts | ✗ | ✓ | ✓ |
-| Approve/reject absences, wishes, corrections; manual time entries | ✗ | ✓ | ✓ |
+| Approve/reject absences, wishes, corrections, hours of unplanned work; manual time entries | ✗ | ✓ | ✓ |
 | Kiosk pairing/devices, period lock (forward only) | ✗ | ✓ | ✓ |
 | Analytics, live board, audit log | ✗ | ✓ | ✓ |
 | Users: create/invite/disable staff in own hotels, hand-over and reset links | ✗ | ✓ | ✓ |
@@ -533,6 +543,7 @@ Role: **P** public, **S** staff and up, **M** manager and up, **A** admin, **D**
 | AT9 | PUT | /hotels/:id/attendance-lock | M | 6 |
 | AT10 | GET | /attendance/export | M | 6 |
 | AT11 | GET | /hotels/:id/payroll-export | M | 6 |
+| AT12 | PATCH | /attendance/:id/approval | M | 6 |
 | E13 | GET | /employees/:id/time-account | S | 6 |
 | W1 | GET | /shift-wishes | S | 7 |
 | W2 | POST | /employees/:id/shift-wishes | S | 7 |
@@ -647,10 +658,10 @@ GET /kiosk/roster?search=  (X-Device-Token)
 
 POST /kiosk/verify { "employeeId": 1, "pin": "483920" }
 200 { "punchToken": "…60 s, single use…", "displayName": "Maria G.", "status": "not_in",
-      "allowedActions": [ "clock_in" ], "todayShifts": [ ... ] }
+      "allowedActions": [ "clock_in" ], "reasonRequiredForClockIn": false, "todayShifts": [ ... ] }
 401 INVALID_PIN { "attemptsLeft": 3 }      423 PIN_LOCKED { "lockedUntil": "..." }
 
-POST /kiosk/punch  { "punchToken": "...", "action": "clock_in" }
+POST /kiosk/punch  { "punchToken": "...", "action": "clock_in", "reason": "only when unplanned (1.12)" }
 201 { "timeEntryId": 881, "action": "clock_in", "at": "2026-10-05T04:02:03Z", "displayName": "Maria G.",
       "anomalies": [ ], "workedMinutesToday": 0 }
 ```
@@ -1087,6 +1098,7 @@ Each phase ends with migrations applied, endpoints implemented, listed tests gre
 | LEAVE_BLACKOUT | 422 | R22 |
 | WISH_DEADLINE_PASSED | 422 | R10 |
 | OVERRIDE_REASON_REQUIRED | 422 | R18 (minor warning saved without `overrideReason`) |
+| UNPLANNED_REASON_REQUIRED | 422 | 1.12 (clock-in without a planned shift and without a reason) |
 | PAYROLL_MAPPING_INCOMPLETE | 422 | R21 (DATEV consultant/client number, templates or wage types missing) |
 | EMPLOYEE_NOT_ASSIGNED_TO_HOTEL | 422 | R2 (DB trigger message "not assigned to this hotel" maps here) |
 | SCHEDULE_DATE_IN_PAST | 422 | R2 |

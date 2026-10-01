@@ -92,7 +92,8 @@ Method: coverage measurement (statements 83.7% → 91.3%, branches 69.7% → 80.
 endpoint table (all 121 endpoints × anonymous/staff/manager/admin), randomized cross-checks of independent
 implementations (JS vs database trigger, JS vs SQL time arithmetic, per-minute supplements vs a naive reference),
 concurrency races, a load test and a simulated production image. Defects found and fixed are listed in
-SPEC 1.11 and `docs/SECURITY_REVIEW.md` (second pass); 485 tests pass.
+SPEC 1.11 and `docs/SECURITY_REVIEW.md` (second pass). Follow-up feature: unplanned clock-in needs a reason and a
+supervisor's approval before the hours count (SPEC 1.12, migration `0004`); 497 tests pass.
 
 ## 6. Result (this build)
 

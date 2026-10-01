@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto';
-import { Db, getPool, maybeOne, rows } from '../db/pool';
+import { Db, maybeOne, rows } from '../db/pool';
 import { withTransaction, lockEmployees } from '../db/tx';
 import { mapDbError } from '../db/errorMap';
 import { AppError } from '../errors/AppError';
@@ -239,15 +239,37 @@ export async function verifyPin(device: DeviceContext, employeeId: number, pin: 
     );
     const st = await statusOf(db, employeeId);
     const shifts = (await publishedShifts(db, employeeId, addDays(today, -1), today, hotel.id)).filter((x) => x.date === today || x.end > t);
+    const actions = allowedActions(st.status, st.open, s.breakMode);
+    // no planned shift right now: the tablet must ask for a reason before clock_in (the hours need supervisor approval)
+    const reasonRequiredForClockIn = actions.includes('clock_in') && (await findPlannedShift(db, hotel, employeeId, t, today)).link === null;
     return {
       punchToken,
       displayName: displayName(emp.first_name, emp.last_name),
       status: st.status,
-      allowedActions: allowedActions(st.status, st.open, s.breakMode),
+      allowedActions: actions,
+      reasonRequiredForClockIn,
       todayShifts: shifts.map(shiftView),
     };
   });
 }
+
+/**
+ * The published, not yet used shift at THIS hotel that a clock-in right now belongs to (window: 2 h before the start
+ * until its end; yesterday's night shift still running counts). Null = unplanned work (reason + supervisor approval).
+ */
+async function findPlannedShift(db: Db, hotel: Hotel, employeeId: number, t: Date, today: string) {
+  const shifts = await publishedShifts(db, employeeId, addDays(today, -1), today);
+  const linked = await rows(db, 'SELECT schedule_id FROM time_entries WHERE schedule_id = ANY($1::bigint[])', [shifts.map((x) => x.scheduleId)]);
+  const linkedIds = new Set(linked.map((l) => l.schedule_id));
+  const here = shifts
+    .filter((x) => x.hotelId === hotel.id && !linkedIds.has(x.scheduleId))
+    .filter((x) => t.getTime() >= x.start.getTime() - Math.max(2 * 60, hotel.settings.attendance.earlyClockInMinutes) * 60_000 && t <= x.end)
+    .sort((a, b) => Math.abs(a.start.getTime() - t.getTime()) - Math.abs(b.start.getTime() - t.getTime()));
+  return { shifts, link: here[0] ?? null };
+}
+
+const UNPLANNED_REASON_MIN = 3;
+const UNPLANNED_REASON_MAX = 500;
 
 async function dayWorkedMinutes(db: Db, employeeId: number, date: string, tz: string, excludeId?: number) {
   const list = await rows(
@@ -265,18 +287,24 @@ const sumWorked = (list: any[]) =>
   list.reduce((a, e) => a + Math.max(0, Math.floor((new Date(e.clock_out_at).getTime() - new Date(e.clock_in_at).getTime()) / 60_000) - e.break_minutes), 0);
 
 /** K4: one action with server time only. The tablet never sends a time. */
-export async function punch(device: DeviceContext, punchToken: string, action: 'clock_in' | 'clock_out' | 'break_start' | 'break_end', requestId: string) {
-  // consume the token first (single use) in its own statement so a failed action still burns it
+export async function punch(
+  device: DeviceContext,
+  punchToken: string,
+  action: 'clock_in' | 'clock_out' | 'break_start' | 'break_end',
+  requestId: string,
+  reason?: string,
+) {
   const t = now();
-  const db0 = getPool();
-  const tok = await maybeOne(
-    db0,
-    `UPDATE kiosk_punch_tokens SET used_at = $3 WHERE token_hash = $1 AND device_id = $2 AND used_at IS NULL AND expires_at > $3 RETURNING employee_id`,
-    [sha256(punchToken), device.deviceId, t],
-  );
-  if (!tok) throw new AppError('PUNCH_TOKEN_INVALID');
-  const employeeId: number = tok.employee_id;
   return withTransaction(async (db) => {
+    // single-use token, consumed inside the transaction: a refused punch (e.g. missing reason) leaves it usable for the
+    // rest of its 60 s, a successful one burns it, and concurrent uses of the same token serialise on this row
+    const tok = await maybeOne(
+      db,
+      `UPDATE kiosk_punch_tokens SET used_at = $3 WHERE token_hash = $1 AND device_id = $2 AND used_at IS NULL AND expires_at > $3 RETURNING employee_id`,
+      [sha256(punchToken), device.deviceId, t],
+    );
+    if (!tok) throw new AppError('PUNCH_TOKEN_INVALID');
+    const employeeId: number = tok.employee_id;
     await lockEmployees(db, [employeeId]);
     const hotel = await loadHotel(db, device.hotelId);
     const s = hotel.settings;
@@ -288,14 +316,12 @@ export async function punch(device: DeviceContext, punchToken: string, action: '
     let anomalies: Anomaly[] = [];
     if (action === 'clock_in') {
       if (open) throw new AppError(open.status === 'needs_review' ? 'ENTRY_NEEDS_REVIEW' : 'INVALID_PUNCH_STATE');
-      const shifts = await publishedShifts(db, employeeId, addDays(today, -1), today);
-      const linked = await rows(db, 'SELECT schedule_id FROM time_entries WHERE schedule_id = ANY($1::bigint[])', [shifts.map((x) => x.scheduleId)]);
-      const linkedIds = new Set(linked.map((l) => l.schedule_id));
-      const here = shifts
-        .filter((x) => x.hotelId === hotel.id && !linkedIds.has(x.scheduleId))
-        .filter((x) => t.getTime() >= x.start.getTime() - Math.max(2 * 60, s.attendance.earlyClockInMinutes) * 60_000 && t <= x.end)
-        .sort((a, b) => Math.abs(a.start.getTime() - t.getTime()) - Math.abs(b.start.getTime() - t.getTime()));
-      const link = here[0] ?? null;
+      const { shifts, link } = await findPlannedShift(db, hotel, employeeId, t, today);
+      // SPEC 1.12: without a planned shift the employee must say why, and a supervisor must approve the hours
+      const unplannedReason = reason?.trim() ?? '';
+      if (!link && (unplannedReason.length < UNPLANNED_REASON_MIN || unplannedReason.length > UNPLANNED_REASON_MAX)) {
+        throw new AppError('UNPLANNED_REASON_REQUIRED', { details: [{ field: 'reason', issue: `a reason of ${UNPLANNED_REASON_MIN}–${UNPLANNED_REASON_MAX} characters is required` }] });
+      }
       anomalies = clockInAnomalies(t, link, s.attendance);
       if (!link) {
         const elsewhere = shifts.find((x) => x.hotelId !== hotel.id && (x.date === today || x.end > t));
@@ -313,9 +339,9 @@ export async function punch(device: DeviceContext, punchToken: string, action: '
       try {
         const r = await maybeOne(
           db,
-          `INSERT INTO time_entries (hotel_id, employee_id, schedule_id, clock_in_at, status, source_in, device_in_id, anomalies)
-           VALUES ($1,$2,$3,$4,'open','kiosk',$5,$6) RETURNING id`,
-          [hotel.id, employeeId, link?.scheduleId ?? null, t, device.deviceId, JSON.stringify(anomalies)],
+          `INSERT INTO time_entries (hotel_id, employee_id, schedule_id, clock_in_at, status, source_in, device_in_id, anomalies, unplanned_reason, approval_status)
+           VALUES ($1,$2,$3,$4,'open','kiosk',$5,$6,$7,$8) RETURNING id`,
+          [hotel.id, employeeId, link?.scheduleId ?? null, t, device.deviceId, JSON.stringify(anomalies), link ? null : unplannedReason, link ? 'not_required' : 'pending'],
         );
         entryId = r.id;
       } catch (err) {
@@ -385,6 +411,9 @@ export async function punch(device: DeviceContext, punchToken: string, action: '
           `UPDATE time_entries SET clock_out_at = $2, break_minutes = $3, status = 'closed', source_out = 'kiosk', device_out_id = $4, anomalies = $5 WHERE id = $1`,
           [open.id, t, breakMinutes, device.deviceId, JSON.stringify(anomalies)],
         );
+        if (open.approval_status === 'pending') {
+          await notify(db, { userIds: await managerIdsOfHotel(db, open.hotel_id), kind: 'time_approval_requested', params: { timeEntryId: open.id, employeeId }, entityType: 'time_entry', entityId: open.id });
+        }
         if (newAnomalies.some((a) => a.type.startsWith('minor_'))) {
           await notify(db, { userIds: await managerIdsOfHotel(db, open.hotel_id), kind: 'needs_review_entry', params: { timeEntryId: open.id, anomaly: 'minor' }, entityType: 'time_entry', entityId: open.id });
         }

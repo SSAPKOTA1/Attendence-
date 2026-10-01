@@ -51,6 +51,11 @@ export function timeEntryDto(e: any, corrections?: any[]) {
     sourceOut: e.source_out,
     anomalies: e.anomalies ?? [],
     note: e.note,
+    unplannedReason: e.unplanned_reason,
+    approvalStatus: e.approval_status,
+    approvedById: e.approved_by_id,
+    approvedAt: e.approved_at,
+    approvalNote: e.approval_note,
     updatedAt: e.updated_at,
   };
   if (corrections) dto.corrections = corrections.map(correctionDto);
@@ -84,7 +89,7 @@ export async function getEntry(db: Db, ctx: AuthContext, id: number) {
 export async function listEntries(
   db: Db,
   ctx: AuthContext,
-  q: { hotelId?: number; from: string; to: string; employeeId?: string; status?: string; anomaly?: string },
+  q: { hotelId?: number; from: string; to: string; employeeId?: string; status?: string; anomaly?: string; approvalStatus?: string },
 ) {
   let employeeFilter: number | null = null;
   let hotelId: number | null = null;
@@ -104,8 +109,9 @@ export async function listEntries(
         AND (te.clock_in_at AT TIME ZONE h.timezone)::date BETWEEN $3 AND $4
         AND ($5::text IS NULL OR te.status = $5)
         AND ($6::text IS NULL OR te.anomalies @> jsonb_build_array(jsonb_build_object('type', $6::text)))
+        AND ($7::text IS NULL OR te.approval_status = $7)
       ORDER BY te.clock_in_at`,
-    [hotelId, employeeFilter, q.from, q.to, q.status ?? null, q.anomaly ?? null],
+    [hotelId, employeeFilter, q.from, q.to, q.status ?? null, q.anomaly ?? null, q.approvalStatus ?? null],
   );
   return { data: list.map((e) => timeEntryDto(e)) };
 }
@@ -302,6 +308,39 @@ export async function decideCorrection(
   });
 }
 
+/**
+ * AT12 (SPEC 1.12): a supervisor of the entry's hotel (or an admin) approves or rejects the hours of unplanned work.
+ * Only closed entries can be decided; nobody decides their own hours (admins excepted); a rejection needs a note.
+ * Decisions change payroll-relevant hours, so the period lock applies.
+ */
+export async function decideApproval(ctx: AuthContext, id: number, input: { status: 'approved' | 'rejected'; note?: string | null }) {
+  return withTransaction(async (db) => {
+    const { e, managed, own } = await loadEntry(db, ctx, id);
+    if (!managed) throw new AppError('FORBIDDEN');
+    if (own && ctx.role !== 'admin') throw new AppError('FORBIDDEN', { details: [{ issue: 'you cannot approve your own hours; another manager or an admin must' }] });
+    if (e.approval_status === 'not_required') throw new AppError('INVALID_STATUS_TRANSITION', { details: [{ issue: 'this entry belongs to a planned shift and needs no approval' }] });
+    if (e.status !== 'closed') throw new AppError('INVALID_STATUS_TRANSITION', { details: [{ issue: 'the hours are not final yet: the entry must be closed first' }] });
+    if (e.approval_status === input.status) throw new AppError('INVALID_STATUS_TRANSITION', { details: [{ issue: `already ${input.status}` }] });
+    const note = input.note?.trim() || null;
+    if (input.status === 'rejected' && !note) throw new AppError('VALIDATION_ERROR', { details: [{ field: 'note', issue: 'a rejection needs a note for the employee' }] });
+    const hotel = await loadHotel(db, e.hotel_id);
+    const override = checkLock(hotel, [new Date(e.clock_in_at)], ctx, note);
+    const updated = await maybeOne(
+      db,
+      `UPDATE time_entries SET approval_status = $2, approved_by_id = $3, approved_at = $4, approval_note = $5 WHERE id = $1 RETURNING *`,
+      [id, input.status, ctx.userId, now(), note],
+    );
+    await notify(db, { userIds: await userIdsOfEmployee(db, e.employee_id), kind: 'time_approval_decided', params: { status: input.status, timeEntryId: id }, entityType: 'time_entry', entityId: id });
+    await audit(db, ctx, {
+      action: `attendance.approval_${input.status}`, entityType: 'time_entry', entityId: id, hotelId: e.hotel_id,
+      before: { approvalStatus: e.approval_status }, after: { approvalStatus: updated.approval_status },
+      meta: { workedMinutes: workedMinutes(new Date(e.clock_in_at), new Date(e.clock_out_at), e.break_minutes), ...(override ? { lockOverride: true, adminReason: note } : {}) },
+    });
+    const corr = await rows(db, 'SELECT * FROM time_entry_corrections WHERE time_entry_id = $1 ORDER BY id', [id]);
+    return timeEntryDto(updated, corr);
+  });
+}
+
 /** AT8 live board. */
 export async function liveBoard(db: Db, ctx: AuthContext, q: { hotelId?: number; departmentId?: number }) {
   const hotelId = resolveHotelId(ctx, q.hotelId);
@@ -326,6 +365,14 @@ export async function liveBoard(db: Db, ctx: AuthContext, q: { hotelId?: number;
   const needsReview = open
     .filter((r) => r.status === 'needs_review')
     .map((r) => ({ timeEntryId: r.id, employee: name(r), openSince: r.clock_in_at }));
+  const awaiting = await rows(
+    db,
+    `SELECT te.id, te.employee_id, te.clock_in_at, te.clock_out_at, te.unplanned_reason, e.first_name, e.last_name
+       FROM time_entries te JOIN employees e ON e.id = te.employee_id
+      WHERE te.hotel_id = $1 AND te.approval_status = 'pending' ORDER BY te.clock_in_at`,
+    [hotelId],
+  );
+  const awaitingApproval = awaiting.map((r) => ({ timeEntryId: r.id, employee: name(r), clockInAt: r.clock_in_at, clockOutAt: r.clock_out_at, reason: r.unplanned_reason }));
   const shifts = await rows(
     db,
     `SELECT s.id, s.employee_id, s.date, e.first_name, e.last_name, e.attendance_required, sh.name, sh.start_time, sh.end_time, sh.department_id
@@ -379,7 +426,7 @@ export async function liveBoard(db: Db, ctx: AuthContext, q: { hotelId?: number;
       expectedNotArrived.push({ scheduleId: s.id, employee: name(s), shift: { name: s.name, startTime: s.start_time }, minutesLate });
     }
   }
-  return { serverTime: t.toISOString(), clockedIn, expectedNotArrived, noShows, needsReview };
+  return { serverTime: t.toISOString(), clockedIn, expectedNotArrived, noShows, needsReview, awaitingApproval };
 }
 
 /** AT9: managers may only move the lock forward; admins may move it back. */

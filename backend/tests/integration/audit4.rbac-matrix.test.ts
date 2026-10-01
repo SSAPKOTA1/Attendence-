@@ -17,8 +17,8 @@ describe('RBAC matrix derived from the SPEC endpoint table', () => {
   });
   afterAll(() => closePool());
 
-  it('the table has all 121 endpoints', () => {
-    expect(rows).toHaveLength(121);
+  it('the table has all 122 endpoints', () => {
+    expect(rows).toHaveLength(122);
   });
 
   const url = (p: string) => p.replace(':id', '999999').replace(':employeeId', '999999');

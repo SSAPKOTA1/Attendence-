@@ -20,7 +20,7 @@ async function pin(employeeId: number, tok = w.tokens.manager1) {
 async function punch(dev: string, employeeId: number, p: string, action: string) {
   const v = await device(dev).post('/kiosk/verify', { employeeId, pin: p });
   expect(v.status).toBe(200);
-  return device(dev).post('/kiosk/punch', { punchToken: v.body.punchToken, action });
+  return device(dev).post('/kiosk/punch', { punchToken: v.body.punchToken, reason: 'Covering for a colleague (test)', action });
 }
 async function publish(employeeId: number, shiftId: number, date: string, hotelId = w.h1, tok = w.tokens.manager1) {
   const r = await as(tok).post('/schedules', { hotelId, entryType: 'shift', employeeId, shiftId, date });
@@ -237,7 +237,7 @@ describe('audit 3: attendance, kiosk, payroll, concurrency', () => {
     const p = await pin(w.maria);
     const tokens = [];
     for (let i = 0; i < 15; i++) tokens.push((await device(dev).post('/kiosk/verify', { employeeId: w.maria, pin: p })).body.punchToken);
-    const res = await Promise.all(tokens.map((t) => device(dev).post('/kiosk/punch', { punchToken: t, action: 'clock_in' })));
+    const res = await Promise.all(tokens.map((t) => device(dev).post('/kiosk/punch', { punchToken: t, reason: 'Covering for a colleague (test)', action: 'clock_in' })));
     expect(res.filter((r) => r.status === 201)).toHaveLength(1);
     expect(res.filter((r) => r.status === 409)).toHaveLength(14);
     expect((await q(`SELECT 1 FROM time_entries WHERE status = 'open'`)).length).toBe(1);

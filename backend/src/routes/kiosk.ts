@@ -42,8 +42,16 @@ kioskRouter.post('/verify', deviceAuth, async (req, res) => {
 
 kioskRouter.post('/punch', deviceAuth, async (req, res) => {
   // any time sent by the tablet is ignored: only punchToken and action are read (R13.3)
-  const body = parseBody(z.object({ punchToken: z.string().min(10).max(200), action: z.enum(['clock_in', 'clock_out', 'break_start', 'break_end']) }), req);
-  res.status(201).json(await kiosk.punch(req.device!, body.punchToken, body.action, req.requestId));
+  const body = parseBody(
+    z.object({
+      punchToken: z.string().min(10).max(200),
+      action: z.enum(['clock_in', 'clock_out', 'break_start', 'break_end']),
+      // required for clock_in without a planned shift (SPEC 1.12)
+      reason: z.string().max(2000).optional(),
+    }),
+    req,
+  );
+  res.status(201).json(await kiosk.punch(req.device!, body.punchToken, body.action, req.requestId, body.reason));
 });
 
 // ---- manager session ----
