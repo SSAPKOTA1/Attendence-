@@ -398,10 +398,15 @@ describe('Phase 6: kiosk and attendance', () => {
     const unmapped = await M1().get(`/hotels/${w.h1}/payroll-export?month=2026-05&format=datev`);
     expect(unmapped.status).toBe(422);
     expect(unmapped.body.error.code).toBe('PAYROLL_MAPPING_INCOMPLETE');
-    // LODAS is the default product with the LODAS layout pre-filled: only numbers and wage types are missing
-    const fields = unmapped.body.error.details.map((d: any) => d.field);
-    expect(fields).toContain('payroll.datev.consultantNumber');
-    expect(fields).not.toContain('payroll.datev.lineTemplate');
+    // LODAS is the default product with the layout and suggested wage types pre-filled: only the firm's own numbers are missing
+    expect(unmapped.body.error.details.map((d: any) => d.field)).toEqual(['payroll.datev.consultantNumber', 'payroll.datev.clientNumber']);
+    await patchSettings(w.h1, (s) => { s.payroll.datev.consultantNumber = '1234567'; s.payroll.datev.clientNumber = '12345'; });
+    const defaults = await M1().get(`/hotels/${w.h1}/payroll-export?month=2026-05&format=datev`);
+    expect(defaults.status).toBe(200); // works with the suggested wage types, nothing else to configure
+    const text = defaults.text as string;
+    expect(text).toContain('BeraterNr=1234567');
+    expect(text).toMatch(/10;P100;31\.05\.2026;29,50;1;2000;;;"Stunden";/);
+    expect(text).toMatch(/;1;2100;;;"Nacht";/);
     expect((await M1().get(`/hotels/${w.h1}/settings`)).body.payroll.datev.product).toBe('lodas');
     await patchSettings(w.h1, (s) => {
       s.payroll.datev = {
@@ -412,9 +417,10 @@ describe('Phase 6: kiosk and attendance', () => {
         wageTypes: { worked: '100', annualLeave: '200', sick: '300', school: '400', publicHoliday: '530', night: null, saturday: '505', sunday: '510', holiday: '520' },
       };
     });
-    const missingNight = await M1().get(`/hotels/${w.h1}/payroll-export?month=2026-05&format=datev`);
-    expect(missingNight.status).toBe(422);
-    expect(missingNight.body.error.details).toEqual([{ field: 'payroll.datev.wageTypes.night', issue: 'needed for this month' }]);
+    // a cleared wage type falls back to the suggested number instead of blocking the export
+    const clearedNight = await M1().get(`/hotels/${w.h1}/payroll-export?month=2026-05&format=datev`);
+    expect(clearedNight.status).toBe(200);
+    expect(clearedNight.text).toMatch(/;1;2100;;;"Nacht";/);
     await patchSettings(w.h1, (s) => (s.payroll.datev.wageTypes.night = '500'));
     const file = await request(app)
       .get(`/api/v1/hotels/${w.h1}/payroll-export?month=2026-05&format=datev`)

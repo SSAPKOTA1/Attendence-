@@ -5,6 +5,11 @@ export const LODAS_RECORD_DESCRIPTION =
   '[Satzbeschreibung]\n10;u_lod_bwd_buchung_standard;pnr#bwd;abrechnung_zeitraum#bwd;buchungswert#bwd;buchungsschluessel#bwd;la_eigene#bwd;;;bs_wert_butab#bwd;\n[Bewegungsdaten]';
 export const LODAS_LINE = '10;{pnr};{date};{value};{key};{wageType};;;"{note}";';
 
+/** LODAS: the client's own wage types (la_eigene). Suggested numbers so the export works immediately; change them in the hotel settings to match the client's wage-type table. */
+export const DEFAULT_WAGE_TYPES = {
+  worked: '2000', annualLeave: '2010', sick: '2020', school: '2030', publicHoliday: '2040', night: '2100', saturday: '2110', sunday: '2120', holiday: '2130',
+} as const;
+
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'expected HH:mm');
 
 /** Hotel settings (spec section 4). Every level has defaults, so a partial object is completed on parse. */
@@ -97,15 +102,15 @@ export const SettingsSchema = z
             lineTemplate: z.string().default(LODAS_LINE),
             wageTypes: z
               .object({
-                worked: z.string().nullable().default(null),
-                annualLeave: z.string().nullable().default(null),
-                sick: z.string().nullable().default(null),
-                school: z.string().nullable().default(null),
-                publicHoliday: z.string().nullable().default(null),
-                night: z.string().nullable().default(null),
-                saturday: z.string().nullable().default(null),
-                sunday: z.string().nullable().default(null),
-                holiday: z.string().nullable().default(null),
+                worked: z.string().nullable().default(DEFAULT_WAGE_TYPES.worked),
+                annualLeave: z.string().nullable().default(DEFAULT_WAGE_TYPES.annualLeave),
+                sick: z.string().nullable().default(DEFAULT_WAGE_TYPES.sick),
+                school: z.string().nullable().default(DEFAULT_WAGE_TYPES.school),
+                publicHoliday: z.string().nullable().default(DEFAULT_WAGE_TYPES.publicHoliday),
+                night: z.string().nullable().default(DEFAULT_WAGE_TYPES.night),
+                saturday: z.string().nullable().default(DEFAULT_WAGE_TYPES.saturday),
+                sunday: z.string().nullable().default(DEFAULT_WAGE_TYPES.sunday),
+                holiday: z.string().nullable().default(DEFAULT_WAGE_TYPES.holiday),
               })
               .default({}),
           })

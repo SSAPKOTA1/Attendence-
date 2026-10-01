@@ -6,6 +6,8 @@ import { useI18n } from '../../lib/i18n';
 import { todayLocal } from '../../lib/format';
 import { useHotel } from '../../components/hotel';
 import { Dialog, Empty, ErrorBox, Field, Loading, Section, Tag } from '../../components/ui';
+import { Link } from 'react-router-dom';
+import type { ApiError } from '../../lib/api';
 
 export default function Devices() {
   const { t, lang } = useI18n();
@@ -73,7 +75,14 @@ export default function Devices() {
           <button className="btn btn-primary self-end" disabled={exp.isPending} onClick={() => exp.mutate()}>{t('Herunterladen')}</button>
         </div>
         {(warnings.data ?? []).map((w) => <p key={w} className="warn">{t(WARN[w] ?? w)}</p>)}
-        <ErrorBox error={exp.error} />
+        {(exp.error as ApiError | null)?.code === 'PAYROLL_MAPPING_INCOMPLETE' ? (
+          <div className="error-box" role="alert">
+            <strong>{t('Für den DATEV-Export fehlen die Berater- und Mandantennummer.')}</strong>{' '}
+            {t('Bitte unter Einrichtung → Hoteleinstellungen → Lohn-Export eintragen (nur Administration).')}{' '}
+            <Link to="/manage/setup">{t('Zur Einrichtung')}</Link>
+          </div>
+        ) : <ErrorBox error={exp.error} />}
+        {format === 'datev' && <p className="muted small">{t('LODAS: Die Lohnarten sind Vorschläge (2000 Arbeitszeit, 2010 Urlaub …). Beim ersten Import im DATEV-Testmandanten prüfen und in den Hoteleinstellungen anpassen.')}</p>}
       </Section>
 
       {code && (

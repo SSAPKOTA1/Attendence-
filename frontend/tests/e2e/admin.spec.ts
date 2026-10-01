@@ -93,3 +93,27 @@ test('hotel settings: admin changes them and they persist; invalid values are re
   await expect(mp.getByRole('button', { name: 'Einstellungen speichern' })).toHaveCount(0);
   await ctx.close();
 });
+
+test('LODAS export: asks for consultant/client number once, then downloads with the suggested wage types', async ({ page, browser }) => {
+  const ctx = await browser.newContext({ locale: 'de-DE', timezoneId: 'Europe/Berlin' });
+  const mp = await ctx.newPage();
+  await login(mp, MANAGER);
+  await mp.getByRole('link', { name: 'Tablet & Export' }).click();
+  await mp.getByLabel('Format').selectOption('datev');
+  await expect(mp.getByText(/Lohnarten sind Vorschläge/)).toBeVisible();
+  await mp.getByRole('button', { name: 'Herunterladen' }).click();
+  await expect(mp.getByRole('alert')).toContainText('Berater- und Mandantennummer');
+
+  await login(page, ADMIN);
+  await page.getByRole('link', { name: 'Einrichtung' }).click();
+  await page.getByRole('tab', { name: 'Hoteleinstellungen' }).click();
+  await expect(page.getByLabel('Lohnart: Arbeitszeit')).toHaveValue('2000');
+  await page.getByLabel('Beraternummer').fill('1234567');
+  await page.getByLabel('Mandantennummer').fill('12345');
+  await page.getByRole('button', { name: 'Einstellungen speichern' }).click();
+  await expect(page.getByText('Gespeichert.')).toBeVisible();
+
+  const [download] = await Promise.all([mp.waitForEvent('download'), mp.getByRole('button', { name: 'Herunterladen' }).click()]);
+  expect(download.suggestedFilename()).toMatch(/^payroll-\d{4}-\d{2}\.txt$/);
+  await ctx.close();
+});
