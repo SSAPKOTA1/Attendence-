@@ -41,5 +41,5 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
 
 export function notFoundHandler(req: Request, res: Response): void {
   const lang = req.lang ?? 'de';
-  res.status(404).json({ error: { code: 'RESOURCE_NOT_FOUND', message: ERROR_CATALOG.RESOURCE_NOT_FOUND[lang], requestId: req.requestId } });
+  res.status(404).json({ error: { code: 'RESOURCE_NOT_FOUND', message: ERROR_CATALOG.RESOURCE_NOT_FOUND[lang], details: [{ issue: 'route not found' }], requestId: req.requestId } });
 }

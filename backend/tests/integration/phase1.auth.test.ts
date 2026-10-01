@@ -194,10 +194,10 @@ describe('Phase 1: auth, users, hotels, access', () => {
     const b = await anon.post('/auth/login', { login: 'm2@tripinn.test', password: PW });
     const list = await as(a.body.accessToken).get('/auth/sessions');
     expect(list.status).toBe(200);
-    expect(list.body.data.length).toBeGreaterThanOrEqual(2);
-    const current = list.body.data.find((s: any) => s.current);
+    expect(list.body.length).toBeGreaterThanOrEqual(2);
+    const current = list.body.find((s: any) => s.current);
     expect(current).toBeTruthy();
-    const other = list.body.data.find((s: any) => !s.current && s.userAgent !== 'vitest');
+    const other = list.body.find((s: any) => !s.current && s.userAgent !== 'vitest');
     expect((await as(a.body.accessToken).delete(`/auth/sessions/${other.id}`)).status).toBe(204);
     const refreshB = await anon.post('/auth/refresh', { refreshToken: b.body.refreshToken });
     expect(refreshB.status).toBe(401);

@@ -86,3 +86,19 @@ DST nights and kiosk timestamps deterministic. Unit tests cover the pure domain 
 | `tests/integration/phase9.analytics.test.ts` | 61–63, 75 |
 | `tests/integration/phase10.retention.test.ts` | 64–65 |
 | `tests/unit/*.test.ts` | hours, instants/rest period (DST), weeks, counted days, vacation, minors, anomalies, Bradford, time account |
+
+## 6. Result (this build)
+
+| Check | Result |
+|---|---|
+| `npm run lint` / `npm run typecheck` / `npm run build` | clean |
+| `npm test` | 12 files, 283 tests passing: every scenario 1–117 of spec Section 10 (test names carry the number), 25 domain unit tests, and a route-coverage test proving all 121 operations of the Section 8 catalog are routed |
+| Migrations | `0001_init` (Appendix A verbatim) + `0002_runtime` (punch tokens, two indexes) apply on PostgreSQL 16 |
+| Smoke test | compiled server boots, `/ready` reports migrations, seed data usable, `/api/v1/docs` served |
+
+Known limits / follow-ups:
+- The DATEV golden file is hand-written from the illustrative LODAS layout in R21; replace templates and golden file with the payroll office's approved sample (O16).
+- R19 "suggested username" is left to the client (the API accepts any valid username and reports collisions as `409 DUPLICATE_RESOURCE`).
+- Rate limiting is in-process (per instance); put a shared limiter (e.g. Redis or the reverse proxy) in front when running several instances.
+- Night/Sunday/holiday minutes are computed on clock-in → clock-out; whether breaks reduce supplements depends on the collective agreement (confirm with payroll).
+- Load test, security review and backup/restore drill from Phase 10 are operational tasks outside the code base.

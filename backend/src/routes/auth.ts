@@ -113,7 +113,7 @@ authRouter.post('/change-password', authenticate, async (req, res) => {
 });
 
 authRouter.get('/sessions', authenticate, async (req, res) => {
-  res.json({ data: await auth.listSessions(getPool(), req.ctx!.userId, req.ctx!.sessionId) });
+  res.json(await auth.listSessions(getPool(), req.ctx!.userId, req.ctx!.sessionId));
 });
 
 authRouter.delete('/sessions/:id', authenticate, async (req, res) => {

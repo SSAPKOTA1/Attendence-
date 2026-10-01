@@ -1,0 +1,18 @@
+[Allgemein]
+; Export für LODAS (Testmandant)
+Ziel=LODAS
+Version_SST=1.0
+BeraterNr=1234567
+MandantenNr=12345
+Abrechnungszeitraum=05/2026
+[Satzbeschreibung]
+10;u_lod_bwd_buchung_standard;pnr#bwd;abrechnung_zeitraum#bwd;buchungswert#bwd;buchungsschluessel#bwd;la_eigene#bwd;;;bs_wert_butab#bwd;
+[Bewegungsdaten]
+10;P100;31.05.2026;22,00;1;100;;;"Stunden";
+10;P100;31.05.2026;16,00;1;200;;;"Urlaub";
+10;P100;31.05.2026;8,00;1;300;;;"Krank";
+10;P100;31.05.2026;7,00;1;500;;;"Nacht";
+10;P100;31.05.2026;8,00;1;510;;;"Sonntag";
+10;P100;31.05.2026;8,00;1;520;;;"Feiertag";
+10;P100;31.05.2026;2,0;71;;;;"Urlaub Tage";
+10;P100;31.05.2026;1,0;72;;;;"Krank Tage";

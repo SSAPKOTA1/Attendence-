@@ -18,11 +18,11 @@ export class AppError extends Error {
 
   constructor(
     code: ErrorCode,
-    opts: { message?: string; details?: ErrorDetail[] | unknown[]; extra?: Record<string, unknown>; body?: Record<string, unknown> } = {},
+    opts: { message?: string; details?: ErrorDetail[] | unknown[]; extra?: Record<string, unknown>; body?: Record<string, unknown>; status?: number } = {},
   ) {
     super(opts.message ?? code);
     this.code = code;
-    this.status = ERROR_CATALOG[code].status;
+    this.status = opts.status ?? ERROR_CATALOG[code].status;
     this.details = opts.details;
     this.extra = opts.extra;
     this.body = opts.body;

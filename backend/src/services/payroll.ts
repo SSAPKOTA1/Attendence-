@@ -162,7 +162,8 @@ export function buildDatev(hotel: Hotel, month: string, data: PayrollRow[]): Buf
   if (missing.length > 0) throw new AppError('PAYROLL_MAPPING_INCOMPLETE', { details: missing });
   const noNumber = data.filter((r) => !r.employeeNumber);
   if (noNumber.length > 0) {
-    throw new AppError('VALIDATION_ERROR', { details: noNumber.map((r) => ({ field: 'employeeNumber', issue: 'personnel number missing', employeeId: r.employeeId })) });
+    // R21 / test 116: a business-rule failure of the export, answered with 422 (not a malformed request)
+    throw new AppError('VALIDATION_ERROR', { status: 422, details: noNumber.map((r) => ({ field: 'employeeNumber', issue: 'personnel number missing', employeeId: r.employeeId })) });
   }
   const { to } = monthRange(month);
   const date = `${to.slice(8, 10)}.${to.slice(5, 7)}.${to.slice(0, 4)}`;
