@@ -62,3 +62,34 @@ test('audit log lists what happened', async ({ page }) => {
   await page.getByLabel('Aktion (genau, z. B. shift.create)').fill('shift.create');
   await expect(page.getByRole('cell', { name: /shift\.create/ }).first()).toBeVisible();
 });
+
+test('hotel settings: admin changes them and they persist; invalid values are refused; managers can only read', async ({ page, browser }) => {
+  await login(page, ADMIN);
+  await page.getByRole('link', { name: 'Einrichtung' }).click();
+  await page.getByRole('tab', { name: 'Hoteleinstellungen' }).click();
+  const autoClose = page.getByLabel('Vergessenes Ausstempeln: Plan-Zeit nach … Std. gutschreiben (leer = aus)');
+  await expect(autoClose).toHaveValue('5');
+  await autoClose.fill('3');
+  await page.getByLabel('Lohnart: Arbeitszeit').fill('2000');
+  await page.getByRole('group', { name: 'Pausenregeln (Bruttozeit)' }).getByRole('button', { name: 'Regel hinzufügen' }).click();
+  await page.getByRole('button', { name: 'Einstellungen speichern' }).click();
+  await expect(page.getByText('Gespeichert.')).toBeVisible();
+  await page.reload();
+  await page.getByRole('tab', { name: 'Hoteleinstellungen' }).click();
+  await expect(page.getByLabel('Vergessenes Ausstempeln: Plan-Zeit nach … Std. gutschreiben (leer = aus)')).toHaveValue('3');
+  await expect(page.getByLabel('Lohnart: Arbeitszeit')).toHaveValue('2000');
+  await expect(page.getByRole('group', { name: 'Pausenregeln (Bruttozeit)' }).getByLabel('Minuten Pause')).toHaveCount(3);
+
+  await page.getByLabel('Höchstzeit pro Tag (Std.)').first().fill('99'); // above the allowed 24 h
+  await page.getByRole('button', { name: 'Einstellungen speichern' }).click();
+  await expect(page.getByRole('alert')).toBeVisible();
+
+  const ctx = await browser.newContext({ locale: 'de-DE', timezoneId: 'Europe/Berlin' });
+  const mp = await ctx.newPage();
+  await login(mp, MANAGER);
+  await mp.getByRole('link', { name: 'Einrichtung' }).click();
+  await mp.getByRole('tab', { name: 'Hoteleinstellungen' }).click();
+  await expect(mp.getByLabel('Lohnart: Arbeitszeit')).toBeDisabled();
+  await expect(mp.getByRole('button', { name: 'Einstellungen speichern' })).toHaveCount(0);
+  await ctx.close();
+});

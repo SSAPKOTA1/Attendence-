@@ -15,7 +15,7 @@ app-specific layout lives in `src/styles/app.css`). No UI framework, no CSS-in-J
 | Sign-in | `/login`, `/forgot-password`, `/reset-password`, `/accept-invite` | everyone | login, reset, invite activation |
 | Tablet (kiosk) | `/kiosk` | shared device (device token, no user) | pairing code, who is due / name search, PIN pad, clock in/out/break, reason for unplanned work, server clock |
 | Employee portal | `/portal/*`, `/notifications`, `/profile` | everyone with an employee record | dashboard, own roster (+ colleagues per plan visibility), vacation request with preview and balance, wishes, own times and correction requests, questions, notifications, profile (language, PIN, password, sessions, e-mail settings) |
-| Manager dashboard | `/manage/*` | manager, admin | roster week grid (draft/publish/copy/print, rule checks, cover finder), live board, requests (absences, corrections, wishes, unplanned time approval), staff (onboarding, vacation balance and carry-over, targets, time account, PIN, hotels), time entries (manual/corrections), analytics, tablets/period lock/payroll export, setup (shifts, staffing, departments, users and invite links, leave blackouts, audit log) |
+| Manager dashboard | `/manage/*` | manager, admin | roster week grid (draft/publish/copy/print, rule checks, cover finder), live board, requests (absences, corrections, wishes, unplanned time approval), staff (onboarding, vacation balance and carry-over, targets, time account, PIN, hotels), time entries (manual/corrections), analytics, tablets/period lock/payroll export, setup (shifts, staffing, departments, users and invite links, leave blackouts, hotel settings (admin edits, managers read), audit log) |
 
 Role rules mirror the API (the API stays the authority): shifts are designed by admins only, employees are added/deleted by admins only,
 managers see only their hotels, floating staff show a reduced view.
@@ -53,7 +53,7 @@ npm run test:e2e       # real backend + real PostgreSQL + Chromium; creates, mig
 ```
 
 - Unit tests (vitest, 21): date helpers, DST-safe local↔instant conversion, API client (refresh, single-flight, cross-tab Web Lock, downloads, errors, pagination), i18n completeness.
-- End-to-end (Playwright, 32 tests; the e2e backend issues 8-second access tokens so the silent refresh is exercised constantly): sign-in/redirects/session restore/role access, language switch, roster planning → publish → employee sees it,
+- End-to-end (Playwright, 33 tests; the e2e backend issues 8-second access tokens so the silent refresh is exercised constantly): sign-in/redirects/session restore/role access, language switch, roster planning → publish → employee sees it,
   rule refusal, vacation request → approval → balance, tablet pairing → wrong PIN → unplanned clock-in with reason → clock-out → supervisor approval,
   onboarding with vacation balances and automatic carry-over, shift design by admin and staffing, invite link → activation, audit log, questions and
   notifications, wishes, time correction, profile/PIN/password, period lock and payroll download, tablet PIN lock-out and revoked tablets, youth-protection override, allowance/blackout refusals,
@@ -72,6 +72,5 @@ The image build itself was not run in the authoring environment (no Docker daemo
 
 - The employee portal shows times in `Europe/Berlin` (the profile API does not expose the hotel's time zone); the tablet and manager screens use the hotel's own zone.
 - No offline mode: the tablet needs the network (a punch without a server time would be invalid by design).
-- Hotel settings (`PUT /hotels/:id/settings`) are not editable in the UI yet; use the API.
-- Public holidays, anonymisation and the cross-hotel assignment history have no screen yet.
+- Public holidays and anonymisation have no screen yet.
 - Accessibility: semantic landmarks, labelled controls, focus rings, `role=alert/status` for messages; no full screen-reader audit has been done.

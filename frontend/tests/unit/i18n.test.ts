@@ -15,6 +15,7 @@ function usedTexts(): Map<string, string> {
     for (const m of s.matchAll(/\bt\(\s*(['"])((?:\\.|(?!\1).)*)\1/g)) out.set(m[2].replace(/\\'/g, "'"), f);
     for (const blk of s.matchAll(/Record<string, string> = \{(.*?)\n?\};/gs)) for (const m of blk[1].matchAll(/:\s*'((?:\\.|[^'])*)'/g)) out.set(m[1].replace(/\\'/g, "'"), f);
     for (const m of s.matchAll(/\[\d+, '([^']+)'\]/g)) out.set(m[1], f);
+    for (const m of s.matchAll(/\bL\(\s*'((?:\\.|[^'])*)'\)/g)) out.set(m[1].replace(/\\'/g, "'"), f); // L('…'): translated when rendered
   }
   return out;
 }

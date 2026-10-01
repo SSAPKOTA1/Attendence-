@@ -8,10 +8,11 @@ import { useHotel } from '../../components/hotel';
 import { useHotelEmployees } from '../../components/employees';
 import { Dialog, Empty, ErrorBox, Field, Loading, Tag } from '../../components/ui';
 import type { Department, Shift } from '../../lib/types';
+import SettingsEditor from './SettingsEditor';
 
-const TABS = ['shifts', 'departments', 'users', 'blackouts', 'audit'] as const;
+const TABS = ['shifts', 'departments', 'users', 'blackouts', 'hotel', 'audit'] as const;
 type Tab = (typeof TABS)[number];
-const TAB_LABEL: Record<Tab, string> = { shifts: 'Dienste', departments: 'Abteilungen', users: 'Benutzer', blackouts: 'Urlaubssperren', audit: 'Protokoll' };
+const TAB_LABEL: Record<Tab, string> = { shifts: 'Dienste', departments: 'Abteilungen', users: 'Benutzer', blackouts: 'Urlaubssperren', hotel: 'Hoteleinstellungen', audit: 'Protokoll' };
 
 export default function Setup() {
   const { t } = useI18n();
@@ -28,6 +29,7 @@ export default function Setup() {
       {tab === 'departments' && <Departments hotelId={hotel.id} />}
       {tab === 'users' && <Users hotelId={hotel.id} />}
       {tab === 'blackouts' && <Blackouts hotelId={hotel.id} />}
+      {tab === 'hotel' && <SettingsEditor hotelId={hotel.id} />}
       {tab === 'audit' && <Audit hotelId={hotel.id} />}
     </div>
   );
