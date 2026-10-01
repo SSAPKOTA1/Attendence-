@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import request from 'supertest';
+import { strFromU8, unzipSync } from 'fflate';
 import { anon, app, as, device } from '../helpers/api';
 import { patchSettings, setupWorld, World } from '../helpers/fixtures';
 import { q, q1 } from '../helpers/db';
@@ -379,6 +380,27 @@ describe('Phase 6: kiosk and attendance', () => {
     expect(csv.status).toBe(200);
     expect(csv.headers['content-type']).toMatch(/text\/csv/);
     expect(csv.text.split('\r\n')[0]).toBe('employeeNumber,lastName,firstName,employmentType,payType,workedMinutes,plannedMinutes,creditedAnnualMinutes,creditedSickMinutes,creditedSchoolMinutes,creditedPublicHolidayMinutes,absenceDaysAnnual,absenceDaysSick,absenceDaysUnpaid,nightMinutes,saturdayMinutes,sundayMinutes,holidayMinutes,openOrReviewEntries,unapprovedEntries,timeAccountDeltaMinutes');
+    const xlsx = await request(app)
+      .get(`/api/v1/hotels/${w.h1}/payroll-export?month=2026-05&format=xlsx`)
+      .set('Authorization', `Bearer ${w.tokens.manager1}`)
+      .buffer(true)
+      .parse((res, cb) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (c: Buffer) => chunks.push(c));
+        res.on('end', () => cb(null, Buffer.concat(chunks)));
+      });
+    expect(xlsx.status).toBe(200);
+    expect(xlsx.headers['content-type']).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    expect(xlsx.headers['content-disposition']).toBe(`attachment; filename="lohn-${w.h1}-2026-05.xlsx"`);
+    expect(xlsx.headers['x-warnings']).toBe('period_not_locked');
+    const files = unzipSync(new Uint8Array(xlsx.body as Buffer));
+    const sheet = strFromU8(files['xl/worksheets/sheet1.xml']);
+    const strings = strFromU8(files['xl/sharedStrings.xml']);
+    // readable German headers and names; hours as decimal numbers instead of minutes (1770 min = 29.5 h, 450 min = 7.5 h)
+    for (const text of ['Personalnr.', 'Nachname', 'Arbeitszeit (Std.)', 'Nacht (Std.)', 'Zeitkonto-Saldo (Std.)', 'Garcia', 'Maria', 'P100', 'Vollzeit', 'Summe']) expect(strings).toContain(text);
+    expect(sheet).toContain('<v>29.5</v>');
+    expect(sheet).toContain('<v>7.5</v>');
+    expect(sheet).not.toContain('<v>1770</v>');
     const att = await M1().get(`/attendance/export?hotelId=${w.h1}&from=2026-05-01&to=2026-05-31&format=csv`);
     expect(att.status).toBe(200);
     expect(att.text.trim().split('\r\n')).toHaveLength(6);

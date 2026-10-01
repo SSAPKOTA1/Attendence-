@@ -26,11 +26,11 @@ export default function Devices() {
   const lock = useMutation({ mutationFn: () => put(`/hotels/${hid}/attendance-lock`, { lockedUntil: lockDate, ...(lockReason ? { reason: lockReason } : {}) }), onSuccess: () => qc.invalidateQueries({ queryKey: ['hotels'] }) });
 
   const [month, setMonth] = useState(() => { const d = new Date(); d.setMonth(d.getMonth() - 1); return d.toISOString().slice(0, 7); });
-  const [format, setFormat] = useState('csv');
+  const [format, setFormat] = useState('xlsx');
   const exp = useMutation({
     mutationFn: async () => {
-      const ext = format === 'json' ? 'json' : format === 'datev' ? 'txt' : 'csv';
-      await download(`/hotels/${hid}/payroll-export`, { month, format }, `payroll-${month}.${ext}`);
+      const name = format === 'xlsx' ? `lohn-${month}.xlsx` : `payroll-${month}.${format === 'json' ? 'json' : format === 'datev' ? 'txt' : 'csv'}`;
+      await download(`/hotels/${hid}/payroll-export`, { month, format }, name);
     },
   });
   const warnings = useQuery({ queryKey: ['export-warnings', hid, month], enabled: !!hid, queryFn: () => get(`/hotels/${hid}/payroll-export`, { month, format: 'json' }).then((r) => r.warnings as string[]) });
@@ -71,7 +71,7 @@ export default function Devices() {
       <Section title={t('Lohn-Export')}>
         <div className="row gap wrap">
           <Field label={t('Monat')}>{(i) => <input id={i} className="input" type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} />}</Field>
-          <Field label={t('Format')}>{(i) => <select id={i} className="input" value={format} onChange={(e) => setFormat(e.target.value)}><option value="csv">CSV</option><option value="json">JSON</option><option value="datev">DATEV LODAS</option></select>}</Field>
+          <Field label={t('Format')}>{(i) => <select id={i} className="input" value={format} onChange={(e) => setFormat(e.target.value)}><option value="xlsx">{t('Excel-Tabelle (.xlsx)')}</option><option value="csv">CSV</option><option value="json">JSON</option><option value="datev">DATEV LODAS</option></select>}</Field>
           <button className="btn btn-primary self-end" disabled={exp.isPending} onClick={() => exp.mutate()}>{t('Herunterladen')}</button>
         </div>
         {(warnings.data ?? []).map((w) => <p key={w} className="warn">{t(WARN[w] ?? w)}</p>)}

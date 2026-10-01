@@ -122,3 +122,14 @@ test('time correction: employee requests it, manager approves, the entry changes
   await expect(page.getByRole('row', { name: /15:00/ })).toBeVisible();
   await expect(page.getByRole('row', { name: /30 min/ })).toBeVisible();
 });
+
+test('manager: the payroll export is an Excel table by default', async ({ page }) => {
+  await login(page, MANAGER);
+  await page.getByRole('link', { name: 'Tablet & Export' }).click();
+  await expect(page.getByLabel('Format')).toHaveValue('xlsx');
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Herunterladen' }).click()]);
+  expect(download.suggestedFilename()).toMatch(/^lohn-\d{4}-\d{2}\.xlsx$/);
+  const path = await download.path();
+  const { readFileSync } = await import('node:fs');
+  expect(readFileSync(path).subarray(0, 2).toString()).toBe('PK'); // a real .xlsx (zip) file
+});

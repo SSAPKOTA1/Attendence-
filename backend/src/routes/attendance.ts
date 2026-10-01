@@ -140,7 +140,7 @@ attendanceRouter.put('/hotels/:id/attendance-lock', requireRole('manager'), asyn
 });
 
 attendanceRouter.get('/hotels/:id/payroll-export', requireRole('manager'), async (req, res) => {
-  const q = parseQuery(z.object({ month: zMonth, format: z.enum(['csv', 'json', 'datev']).default('json') }), req);
+  const q = parseQuery(z.object({ month: zMonth, format: z.enum(['csv', 'json', 'datev', 'xlsx']).default('json') }), req);
   const hotelId = idParam(req);
   const out = await payrollExport(getPool(), req.ctx!, hotelId, q.month, q.format);
   if (out.kind === 'json') return res.json(out.body);
@@ -150,6 +150,11 @@ attendanceRouter.get('/hotels/:id/payroll-export', requireRole('manager'), async
     return res.send(out.body);
   }
   if (!Buffer.isBuffer(out.body)) throw new AppError('INTERNAL_ERROR');
+  if (out.kind === 'xlsx') {
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="lohn-${hotelId}-${q.month}.xlsx"`);
+    return res.end(out.body);
+  }
   res.setHeader('Content-Type', 'text/plain; charset=windows-1252');
   res.setHeader('Content-Disposition', `attachment; filename="datev-${hotelId}-${q.month}.txt"`);
   res.end(out.body);

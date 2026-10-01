@@ -257,6 +257,7 @@ export const EN: Record<string, string> = {
   'Vorschlag 2000; leer = Vorschlag': 'Suggestion 2000; empty = suggestion',
   'Pflicht für den DATEV-Export': 'Required for the DATEV export',
   Feiertage: 'Public holidays',
+  'Excel-Tabelle (.xlsx)': 'Excel table (.xlsx)',
   Datenschutz: 'Data protection',
   Anonymisiert: 'Anonymised',
   Anonymisieren: 'Anonymise',

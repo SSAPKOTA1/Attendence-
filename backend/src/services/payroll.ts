@@ -1,4 +1,5 @@
 import iconv from 'iconv-lite';
+import writeXlsxFile, { type SheetData } from 'write-excel-file/node';
 import { Db, rows } from '../db/pool';
 import { AppError } from '../errors/AppError';
 import type { AuthContext } from '../types/context';
@@ -142,7 +143,7 @@ export async function payrollRows(db: Db, hotel: Hotel, month: string): Promise<
   return out;
 }
 
-export async function payrollExport(db: Db, ctx: AuthContext, hotelId: number, month: string, format: 'csv' | 'json' | 'datev') {
+export async function payrollExport(db: Db, ctx: AuthContext, hotelId: number, month: string, format: 'csv' | 'json' | 'datev' | 'xlsx') {
   if (!ctx.hotelIds.includes(hotelId)) throw new AppError('RESOURCE_NOT_FOUND');
   const hotel = await loadHotel(db, hotelId);
   const data = await payrollRows(db, hotel, month);
@@ -152,7 +153,56 @@ export async function payrollExport(db: Db, ctx: AuthContext, hotelId: number, m
   await audit(db, ctx, { action: 'payroll.export', entityType: 'hotel', entityId: hotelId, hotelId, meta: { month, format, employees: data.length } });
   if (format === 'json') return { kind: 'json' as const, body: { hotelId, month, warnings, data } };
   if (format === 'csv') return { kind: 'csv' as const, body: toCsv(PAYROLL_COLUMNS, data as any), warnings };
+  if (format === 'xlsx') return { kind: 'xlsx' as const, body: await buildXlsx(data), warnings };
   return { kind: 'datev' as const, body: buildDatev(hotel, month, data), warnings };
+}
+
+const EMPLOYMENT_LABEL: Record<string, string> = {
+  full_time: 'Vollzeit', part_time: 'Teilzeit', mini_job: 'Minijob', working_student: 'Werkstudent', apprentice: 'Auszubildende', intern: 'Praktikum', other: 'Sonstige',
+};
+const hours = (minutes: number) => Math.round((minutes / 60) * 100) / 100;
+
+/** Plain spreadsheet for the payroll clerk: readable headers, hours as decimal numbers (not minutes), a total row, no DATEV knowledge needed. */
+const XLSX_COLUMNS: { header: string; width: number; value: (r: PayrollRow) => string | number | null; sum?: boolean; format?: string }[] = [
+  { header: 'Personalnr.', width: 12, value: (r) => r.employeeNumber },
+  { header: 'Nachname', width: 18, value: (r) => r.lastName },
+  { header: 'Vorname', width: 16, value: (r) => r.firstName },
+  { header: 'Beschäftigung', width: 16, value: (r) => EMPLOYMENT_LABEL[r.employmentType] ?? r.employmentType },
+  { header: 'Vergütung', width: 12, value: (r) => (r.payType === 'salary' ? 'Gehalt' : 'Stundenlohn') },
+  { header: 'Arbeitszeit (Std.)', width: 14, value: (r) => hours(r.workedMinutes), sum: true, format: '0.00' },
+  { header: 'Soll laut Plan (Std.)', width: 14, value: (r) => hours(r.plannedMinutes), sum: true, format: '0.00' },
+  { header: 'Urlaub (Std.)', width: 12, value: (r) => hours(r.creditedAnnualMinutes), sum: true, format: '0.00' },
+  { header: 'Krank (Std.)', width: 12, value: (r) => hours(r.creditedSickMinutes), sum: true, format: '0.00' },
+  { header: 'Berufsschule (Std.)', width: 14, value: (r) => hours(r.creditedSchoolMinutes), sum: true, format: '0.00' },
+  { header: 'Feiertag Gutschrift (Std.)', width: 16, value: (r) => hours(r.creditedPublicHolidayMinutes), sum: true, format: '0.00' },
+  { header: 'Urlaubstage', width: 12, value: (r) => r.absenceDaysAnnual, sum: true, format: '0.0' },
+  { header: 'Krankheitstage', width: 12, value: (r) => r.absenceDaysSick, sum: true, format: '0.0' },
+  { header: 'Unbezahlt (Tage)', width: 12, value: (r) => r.absenceDaysUnpaid, sum: true, format: '0.0' },
+  { header: 'Nacht (Std.)', width: 12, value: (r) => hours(r.nightMinutes), sum: true, format: '0.00' },
+  { header: 'Samstag (Std.)', width: 12, value: (r) => hours(r.saturdayMinutes), sum: true, format: '0.00' },
+  { header: 'Sonntag (Std.)', width: 12, value: (r) => hours(r.sundayMinutes), sum: true, format: '0.00' },
+  { header: 'Feiertag Zuschlag (Std.)', width: 16, value: (r) => hours(r.holidayMinutes), sum: true, format: '0.00' },
+  { header: 'Offene Einträge', width: 12, value: (r) => r.openOrReviewEntries, sum: true },
+  { header: 'Nicht genehmigt', width: 12, value: (r) => r.unapprovedEntries, sum: true },
+  { header: 'Zeitkonto-Saldo (Std.)', width: 16, value: (r) => r.timeAccountDeltaMinutes === null ? null : hours(r.timeAccountDeltaMinutes), sum: true, format: '0.00' },
+];
+
+async function buildXlsx(data: PayrollRow[]): Promise<Buffer> {
+  const bold = { fontWeight: 'bold' as const };
+  const sheet: SheetData = [
+    XLSX_COLUMNS.map((c) => ({ value: c.header, ...bold, wrap: true })),
+    ...data.map((r) => XLSX_COLUMNS.map((c) => {
+      const v = c.value(r);
+      return typeof v === 'number' ? { value: v, type: Number, format: c.format } : { value: v ?? '' };
+    })),
+    XLSX_COLUMNS.map((c, i) => {
+      if (i === 0) return { value: 'Summe', ...bold };
+      if (!c.sum) return null;
+      const total = data.reduce((acc, r) => acc + Number(c.value(r)), 0);
+      return { value: Math.round(total * 100) / 100, type: Number, format: c.format, ...bold };
+    }),
+  ];
+  return writeXlsxFile(sheet, { sheet: 'Lohnexport', columns: XLSX_COLUMNS.map((c) => ({ width: c.width })), stickyRowsCount: 1 }).toBuffer();
 }
 
 const WAGE_KEYS: { key: keyof Hotel['settings']['payroll']['datev']['wageTypes']; column: keyof PayrollRow; note: string }[] = [
