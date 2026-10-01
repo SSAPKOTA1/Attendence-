@@ -250,4 +250,10 @@ export const EN: Record<string, string> = {
   'voller Name': 'full name',
   'warnen': 'warn',
   'z. B. 03-31': 'e.g. 03-31',
+  'Für den DATEV-Export fehlen die Berater- und Mandantennummer.': 'The DATEV export needs the consultant and client number.',
+  'Bitte unter Einrichtung → Hoteleinstellungen → Lohn-Export eintragen (nur Administration).': 'Please enter them under Setup → Hotel settings → Payroll export (administration only).',
+  'Zur Einrichtung': 'Go to setup',
+  'LODAS: Die Lohnarten sind Vorschläge (2000 Arbeitszeit, 2010 Urlaub …). Beim ersten Import im DATEV-Testmandanten prüfen und in den Hoteleinstellungen anpassen.': 'LODAS: the wage types are suggestions (2000 worked time, 2010 vacation …). Check them on the first import in a DATEV test client and adjust them in the hotel settings.',
+  'Vorschlag 2000; leer = Vorschlag': 'Suggestion 2000; empty = suggestion',
+  'Pflicht für den DATEV-Export': 'Required for the DATEV export',
 };

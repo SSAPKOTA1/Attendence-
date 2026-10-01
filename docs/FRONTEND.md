@@ -53,7 +53,7 @@ npm run test:e2e       # real backend + real PostgreSQL + Chromium; creates, mig
 ```
 
 - Unit tests (vitest, 21): date helpers, DST-safe local↔instant conversion, API client (refresh, single-flight, cross-tab Web Lock, downloads, errors, pagination), i18n completeness.
-- End-to-end (Playwright, 33 tests; the e2e backend issues 8-second access tokens so the silent refresh is exercised constantly): sign-in/redirects/session restore/role access, language switch, roster planning → publish → employee sees it,
+- End-to-end (Playwright, 34 tests; the e2e backend issues 8-second access tokens so the silent refresh is exercised constantly): sign-in/redirects/session restore/role access, language switch, roster planning → publish → employee sees it,
   rule refusal, vacation request → approval → balance, tablet pairing → wrong PIN → unplanned clock-in with reason → clock-out → supervisor approval,
   onboarding with vacation balances and automatic carry-over, shift design by admin and staffing, invite link → activation, audit log, questions and
   notifications, wishes, time correction, profile/PIN/password, period lock and payroll download, tablet PIN lock-out and revoked tablets, youth-protection override, allowance/blackout refusals,

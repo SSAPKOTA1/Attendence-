@@ -105,10 +105,10 @@ supervisor's approval before the hours count (SPEC 1.12, migration `0004`); forg
 | Smoke test | compiled server boots, `/ready` reports migrations, seed data usable, `/api/v1/docs` served |
 
 Known limits / follow-ups:
-- The DATEV golden file is hand-written from the illustrative LODAS layout in R21; replace templates and golden file with the payroll office's approved sample (O16).
+- The DATEV golden file is hand-written from the LODAS layout in R21 (not yet checked against a DATEV test client); adjust templates/wage types in the hotel settings if the first import shows differences.
 - R19 "suggested username" is left to the client (the API accepts any valid username and reports collisions as `409 DUPLICATE_RESOURCE`).
 - Rate limiting is in-process (per instance); put a shared limiter (e.g. Redis or the reverse proxy) in front when running several instances.
 - Night/Saturday/Sunday/holiday minutes: the break is deducted automatically and proportionally (owner decision, SPEC 1.7). If the collective agreement places the break at a fixed time instead, only `domain/supplements.ts` changes.
 - Pay type and public holidays per employee (SPEC 1.8): migration `0003_pay_type_holidays`; existing employees default to `salary` / holidays off.
-- LODAS is the default DATEV product with pre-filled templates; consultant/client numbers and wage types still come from the payroll office.
+- LODAS is the default DATEV product with pre-filled templates and suggested wage-type numbers (SPEC 1.7), so only the firm's consultant and client numbers have to be entered (hotel settings). Owner decision: no questionnaire to the payroll office; the first real import is done in a DATEV test client.
 - Load test, security review and backup/restore drill from Phase 10 are operational tasks outside the code base.

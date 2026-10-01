@@ -3,6 +3,7 @@ import { Db, rows } from '../db/pool';
 import { AppError } from '../errors/AppError';
 import type { AuthContext } from '../types/context';
 import { monthRange } from '../domain/dates';
+import { DEFAULT_WAGE_TYPES } from '../domain/settings';
 import { toCsv } from '../domain/csv';
 import { supplementMinutes } from '../domain/supplements';
 import { workedMinutes } from '../domain/anomalies';
@@ -181,9 +182,6 @@ export function buildDatev(hotel: Hotel, month: string, data: PayrollRow[]): Buf
   if (!d.headerTemplate) missing.push({ field: 'payroll.datev.headerTemplate', issue: 'missing' });
   if (!d.recordDescriptionTemplate) missing.push({ field: 'payroll.datev.recordDescriptionTemplate', issue: 'missing' });
   if (!d.lineTemplate) missing.push({ field: 'payroll.datev.lineTemplate', issue: 'missing' });
-  for (const w of WAGE_KEYS) {
-    if (!d.wageTypes[w.key] && data.some((r) => (r[w.column] as number) > 0)) missing.push({ field: `payroll.datev.wageTypes.${w.key}`, issue: 'needed for this month' });
-  }
   if (missing.length > 0) throw new AppError('PAYROLL_MAPPING_INCOMPLETE', { details: missing });
   const noNumber = data.filter((r) => !r.employeeNumber);
   if (noNumber.length > 0) {
@@ -202,7 +200,7 @@ export function buildDatev(hotel: Hotel, month: string, data: PayrollRow[]): Buf
     for (const w of WAGE_KEYS) {
       const minutes = r[w.column] as number;
       if (minutes > 0) {
-        lines.push(fill(d.lineTemplate, { pnr: r.employeeNumber!, date, value: comma(Math.round(minutes / 60 * 100) / 100, 2), key: '1', wageType: d.wageTypes[w.key]!, note: w.note }));
+        lines.push(fill(d.lineTemplate, { pnr: r.employeeNumber!, date, value: comma(Math.round(minutes / 60 * 100) / 100, 2), key: '1', wageType: d.wageTypes[w.key] || DEFAULT_WAGE_TYPES[w.key], note: w.note }));
       }
     }
     if (r.absenceDaysAnnual > 0) lines.push(fill(d.lineTemplate, { pnr: r.employeeNumber!, date, value: comma(r.absenceDaysAnnual, 1), key: '71', wageType: '', note: 'Urlaub Tage' }));
