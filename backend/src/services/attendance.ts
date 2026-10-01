@@ -336,6 +336,24 @@ export async function liveBoard(db: Db, ctx: AuthContext, q: { hotelId?: number;
   );
   const expectedNotArrived = [];
   const noShows = [];
+  // two batched lookups instead of two queries per scheduled shift
+  const empIds = [...new Set(shifts.map((x) => x.employee_id))];
+  const entries = empIds.length
+    ? await rows(
+        db,
+        `SELECT employee_id, schedule_id, clock_in_at, clock_out_at FROM time_entries
+          WHERE employee_id = ANY($1::bigint[]) AND clock_in_at > $2 AND clock_in_at < $3`,
+        [empIds, new Date(t.getTime() - 3 * 86_400_000), new Date(t.getTime() + 86_400_000)],
+      )
+    : [];
+  const absences = empIds.length
+    ? await rows(
+        db,
+        `SELECT employee_id, start_date, end_date FROM time_offs
+          WHERE employee_id = ANY($1::bigint[]) AND status = 'approved' AND start_date <= $3 AND end_date >= $2`,
+        [empIds, addDays(today, -1), today],
+      )
+    : [];
   for (const s of shifts) {
     const inst = shiftInstants(s.date, s.start_time, s.end_time, hotel.timezone);
     if (s.date !== today && inst.end <= t) {
@@ -343,14 +361,17 @@ export async function liveBoard(db: Db, ctx: AuthContext, q: { hotelId?: number;
       continue;
     }
     if (inst.start > t) continue;
-    const entry = await maybeOne(
-      db,
-      `SELECT 1 FROM time_entries WHERE employee_id = $1 AND (schedule_id = $2 OR tstzrange(clock_in_at, COALESCE(clock_out_at, 'infinity')) && tstzrange($3::timestamptz, $4::timestamptz)) LIMIT 1`,
-      [s.employee_id, s.id, new Date(inst.start.getTime() - 2 * 3_600_000), inst.end],
-    );
-    if (entry) continue;
-    const absent = await maybeOne(db, `SELECT 1 FROM time_offs WHERE employee_id = $1 AND status = 'approved' AND start_date <= $2 AND end_date >= $2`, [s.employee_id, s.date]);
-    if (absent) continue;
+    const windowStart = inst.start.getTime() - 2 * 3_600_000;
+    const hasEntry = entries.some((e) => {
+      if (e.employee_id !== s.employee_id) return false;
+      if (e.schedule_id === s.id) return true;
+      // any time entry overlapping [start − 2 h, end) counts as having arrived
+      const inAt = new Date(e.clock_in_at).getTime();
+      const outAt = e.clock_out_at ? new Date(e.clock_out_at).getTime() : Infinity;
+      return inAt < inst.end.getTime() && outAt > windowStart;
+    });
+    if (hasEntry) continue;
+    if (absences.some((x) => x.employee_id === s.employee_id && x.start_date <= s.date && x.end_date >= s.date)) continue;
     const minutesLate = Math.floor((t.getTime() - inst.start.getTime()) / 60_000);
     if (t.getTime() > inst.end.getTime() + tol * 60_000) {
       if (s.attendance_required) noShows.push({ scheduleId: s.id, employee: name(s), shift: { name: s.name, startTime: s.start_time, endTime: s.end_time } });

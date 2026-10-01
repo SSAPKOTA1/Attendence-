@@ -30,54 +30,66 @@ export interface EmployeeInput {
 
 const today = () => todayIn('Europe/Berlin', now());
 
-async function assignmentsOf(db: Db, employeeId: number) {
-  return rows(
+type DtoView = { full: boolean; showBirthDate?: boolean };
+
+/** Builds employee DTOs for many employees with two queries (assignments, departments) instead of two per employee. */
+async function buildEmployeeDtos(db: Db, list: any[], viewOf: (e: any) => DtoView): Promise<any[]> {
+  if (list.length === 0) return [];
+  const ids = list.map((e) => e.id);
+  const assignmentRows = await rows(
     db,
-    `SELECT eh.hotel_id, eh.is_home, eh.assigned_on, eh.unassigned_on, h.name
+    `SELECT eh.employee_id, eh.hotel_id, eh.is_home, h.name
        FROM employee_hotels eh JOIN hotels h ON h.id = eh.hotel_id
-      WHERE eh.employee_id = $1 ORDER BY eh.is_home DESC, eh.hotel_id`,
-    [employeeId],
+      WHERE eh.employee_id = ANY($1::bigint[]) AND eh.unassigned_on IS NULL
+      ORDER BY eh.is_home DESC, eh.hotel_id`,
+    [ids],
   );
+  const deptRows = await rows(
+    db,
+    `SELECT ed.employee_id, d.id, d.name, d.color, d.hotel_id
+       FROM employee_departments ed JOIN departments d ON d.id = ed.department_id
+      WHERE ed.employee_id = ANY($1::bigint[]) AND d.deleted_at IS NULL
+      ORDER BY d.hotel_id, d.name`,
+    [ids],
+  );
+  return list.map((e) => {
+    const view = viewOf(e);
+    const assignments = assignmentRows.filter((a) => a.employee_id === e.id);
+    const hotelIds = assignments.map((a) => a.hotel_id);
+    const home = assignments.find((a) => a.is_home);
+    const dto: any = {
+      id: e.id,
+      employeeNumber: e.employee_number,
+      firstName: e.first_name,
+      lastName: e.last_name,
+      status: e.status,
+      employmentType: e.employment_type,
+      hiredOn: e.hired_on,
+      attendanceRequired: e.attendance_required,
+      publicHolidaysOff: e.public_holidays_off,
+      workWeekdays: e.work_weekdays,
+      terminatedOn: e.terminated_on,
+      homeHotelId: home ? home.hotel_id : null,
+      hotels: assignments.map((a) => ({ id: a.hotel_id, name: a.name, isHome: a.is_home })),
+      departments: deptRows
+        .filter((d) => d.employee_id === e.id && hotelIds.includes(d.hotel_id))
+        .map((d) => ({ id: d.id, name: d.name, color: d.color, hotelId: d.hotel_id })),
+      updatedAt: e.updated_at,
+    };
+    if (view.full) {
+      dto.email = e.email;
+      dto.phone = e.phone;
+      dto.hourlyRate = e.hourly_rate;
+      dto.payType = e.pay_type;
+      dto.anonymizedAt = e.anonymized_at;
+    }
+    if (view.showBirthDate ?? view.full) dto.birthDate = e.birth_date;
+    return dto;
+  });
 }
 
-export async function employeeDto(db: Db, e: any, opts: { full: boolean; showBirthDate?: boolean }) {
-  const t = today();
-  const assignments = (await assignmentsOf(db, e.id)).filter((a) => !a.unassigned_on);
-  void t;
-  const hotelIds = assignments.map((a) => a.hotel_id);
-  const depts = await rows(
-    db,
-    `SELECT d.id, d.name, d.color, d.hotel_id FROM employee_departments ed JOIN departments d ON d.id = ed.department_id
-      WHERE ed.employee_id = $1 AND d.deleted_at IS NULL AND d.hotel_id = ANY($2::bigint[]) ORDER BY d.hotel_id, d.name`,
-    [e.id, hotelIds],
-  );
-  const home = assignments.find((a) => a.is_home);
-  const dto: any = {
-    id: e.id,
-    employeeNumber: e.employee_number,
-    firstName: e.first_name,
-    lastName: e.last_name,
-    status: e.status,
-    employmentType: e.employment_type,
-    hiredOn: e.hired_on,
-    attendanceRequired: e.attendance_required,
-    publicHolidaysOff: e.public_holidays_off,
-    workWeekdays: e.work_weekdays,
-    terminatedOn: e.terminated_on,
-    homeHotelId: home ? home.hotel_id : null,
-    hotels: assignments.map((a) => ({ id: a.hotel_id, name: a.name, isHome: a.is_home })),
-    departments: depts.map((d) => ({ id: d.id, name: d.name, color: d.color, hotelId: d.hotel_id })),
-    updatedAt: e.updated_at,
-  };
-  if (opts.full) {
-    dto.email = e.email;
-    dto.phone = e.phone;
-    dto.hourlyRate = e.hourly_rate;
-    dto.payType = e.pay_type;
-    dto.anonymizedAt = e.anonymized_at;
-  }
-  if (opts.showBirthDate ?? opts.full) dto.birthDate = e.birth_date;
-  return dto;
+export async function employeeDto(db: Db, e: any, opts: DtoView) {
+  return (await buildEmployeeDtos(db, [e], () => opts))[0];
 }
 
 export function viewOf(access: EmployeeAccess) {
@@ -121,14 +133,14 @@ export async function listEmployees(
       WHERE ${where} ORDER BY e.last_name, e.first_name, e.id LIMIT $6 OFFSET $7`,
     [...params, q.limit, (q.page - 1) * q.limit],
   );
-  const data = [];
-  for (const e of list) {
-    const homeRow = await maybeOne(db, 'SELECT hotel_id FROM employee_hotels WHERE employee_id = $1 AND is_home', [e.id]);
-    const full = ctx.role === 'admin' || (!!homeRow && ctx.hotelIds.includes(homeRow.hotel_id));
-    const dto = await employeeDto(db, e, { full });
-    dto.isHome = e.assignment_is_home;
-    data.push(dto);
-  }
+  const homes = new Map(
+    (await rows(db, 'SELECT employee_id, hotel_id FROM employee_hotels WHERE employee_id = ANY($1::bigint[]) AND is_home', [list.map((e) => e.id)])).map((r) => [r.employee_id, r.hotel_id]),
+  );
+  // managers of the home hotel (and admins) get the full view, everyone else the reduced one (no rate, no contact data)
+  const data = await buildEmployeeDtos(db, list, (e) => ({ full: ctx.role === 'admin' || ctx.hotelIds.includes(homes.get(e.id) as number) }));
+  data.forEach((dto, i) => {
+    dto.isHome = list[i].assignment_is_home;
+  });
   return { data, total };
 }
 

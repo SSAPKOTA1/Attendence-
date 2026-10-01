@@ -7,6 +7,8 @@ import { setEtag } from '../middleware/etag';
 import * as emp from '../services/employees';
 import { listHolidays } from '../services/holidays';
 import { loadHotel, resolveHotelId } from '../services/access';
+import { now } from '../clock';
+import { todayIn } from '../domain/dates';
 import { paged, parseBody, parseQuery, zDate, zOptId, zPaging } from '../validators/common';
 
 export const employeesRouter = Router();
@@ -111,6 +113,6 @@ employeesRouter.get('/public-holidays', async (req, res) => {
   const q = parseQuery(z.object({ hotelId: zOptId, year: z.coerce.number().int().min(2000).max(2100).optional() }), req);
   const hotelId = resolveHotelId(req.ctx!, q.hotelId);
   const hotel = await loadHotel(getPool(), hotelId);
-  const year = q.year ?? new Date().getUTCFullYear();
+  const year = q.year ?? Number(todayIn(hotel.timezone, now()).slice(0, 4));
   res.json({ data: listHolidays(hotel.holidayRegion, year, req.ctx!.lang) });
 });
