@@ -15,7 +15,7 @@ import { audit } from './audit';
 export const PAYROLL_COLUMNS = [
   'employeeNumber', 'lastName', 'firstName', 'employmentType', 'workedMinutes', 'plannedMinutes', 'creditedAnnualMinutes',
   'creditedSickMinutes', 'creditedSchoolMinutes', 'absenceDaysAnnual', 'absenceDaysSick', 'absenceDaysUnpaid', 'nightMinutes',
-  'sundayMinutes', 'holidayMinutes', 'openOrReviewEntries', 'timeAccountDeltaMinutes',
+  'saturdayMinutes', 'sundayMinutes', 'holidayMinutes', 'openOrReviewEntries', 'timeAccountDeltaMinutes',
 ];
 
 export interface PayrollRow {
@@ -33,6 +33,7 @@ export interface PayrollRow {
   absenceDaysSick: number;
   absenceDaysUnpaid: number;
   nightMinutes: number;
+  saturdayMinutes: number;
   sundayMinutes: number;
   holidayMinutes: number;
   openOrReviewEntries: number;
@@ -40,7 +41,8 @@ export interface PayrollRow {
 }
 
 /**
- * R21 generic payroll data for one hotel and month. Worked, planned and supplement minutes are counted at this hotel;
+ * R21 generic payroll data for one hotel and month. Supplement minutes (night, Saturday, Sunday, holiday) have the
+ * unpaid break deducted automatically (proportionally, see domain/supplements). Worked, planned and supplement minutes are counted at this hotel;
  * credits and absence days follow the person and are reported by the employee's home hotel only (no double counting).
  */
 export async function payrollRows(db: Db, hotel: Hotel, month: string): Promise<PayrollRow[]> {
@@ -64,15 +66,16 @@ export async function payrollRows(db: Db, hotel: Hotel, month: string): Promise<
     );
     let worked = 0;
     let open = 0;
-    const sup = { nightMinutes: 0, sundayMinutes: 0, holidayMinutes: 0 };
+    const sup = { nightMinutes: 0, saturdayMinutes: 0, sundayMinutes: 0, holidayMinutes: 0 };
     for (const te of entries) {
       if (te.status !== 'closed') {
         open++;
         continue;
       }
       worked += workedMinutes(new Date(te.clock_in_at), new Date(te.clock_out_at), te.break_minutes) ?? 0;
-      const m = supplementMinutes(new Date(te.clock_in_at), new Date(te.clock_out_at), hotel.timezone, s.nightFrom, s.nightTo, (d) => isHoliday(hotel.holidayRegion, d));
+      const m = supplementMinutes(new Date(te.clock_in_at), new Date(te.clock_out_at), hotel.timezone, s.nightFrom, s.nightTo, (d) => isHoliday(hotel.holidayRegion, d), te.break_minutes);
       sup.nightMinutes += m.nightMinutes;
+      sup.saturdayMinutes += m.saturdayMinutes;
       sup.sundayMinutes += m.sundayMinutes;
       sup.holidayMinutes += m.holidayMinutes;
     }
@@ -111,7 +114,10 @@ export async function payrollRows(db: Db, hotel: Hotel, month: string): Promise<
       absenceDaysAnnual: dayN('annual_leave'),
       absenceDaysSick: dayN('sick_leave'),
       absenceDaysUnpaid: dayN('unpaid_leave'),
-      ...sup,
+      nightMinutes: Math.round(sup.nightMinutes),
+      saturdayMinutes: Math.round(sup.saturdayMinutes),
+      sundayMinutes: Math.round(sup.sundayMinutes),
+      holidayMinutes: Math.round(sup.holidayMinutes),
       openOrReviewEntries: open,
       timeAccountDeltaMinutes: delta,
     });
@@ -137,6 +143,7 @@ const WAGE_KEYS: { key: keyof Hotel['settings']['payroll']['datev']['wageTypes']
   { key: 'sick', column: 'creditedSickMinutes', note: 'Krank' },
   { key: 'school', column: 'creditedSchoolMinutes', note: 'Berufsschule' },
   { key: 'night', column: 'nightMinutes', note: 'Nacht' },
+  { key: 'saturday', column: 'saturdayMinutes', note: 'Samstag' },
   { key: 'sunday', column: 'sundayMinutes', note: 'Sonntag' },
   { key: 'holiday', column: 'holidayMinutes', note: 'Feiertag' },
 ];

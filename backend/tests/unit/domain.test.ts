@@ -176,10 +176,14 @@ describe('analytics helpers', () => {
     expect(adjustedMonthlyTarget(160, 22, 1)).toBeCloseTo(9163.64, 1);
     expect(balanceHours(10, [-8220, -9163.636])).toBe(-279.73);
   });
-  it('night / Sunday / holiday minutes per local minute', () => {
+  it('night / Saturday / Sunday / holiday minutes per local minute', () => {
     const m = supplementMinutes(new Date('2026-05-02T20:00:00Z'), new Date('2026-05-03T04:00:00Z'), TZ, '23:00', '06:00', () => false);
     expect(m.nightMinutes).toBe(420);
+    expect(m.saturdayMinutes).toBe(120);
     expect(m.sundayMinutes).toBe(360);
+    // the break is deducted automatically (proportionally): 60 min break on 480 min gross
+    const withBreak = supplementMinutes(new Date('2026-05-02T20:00:00Z'), new Date('2026-05-03T04:00:00Z'), TZ, '23:00', '06:00', () => true, 60);
+    expect(withBreak).toEqual({ nightMinutes: 367.5, saturdayMinutes: 105, sundayMinutes: 315, holidayMinutes: 420 });
     const dst = supplementMinutes(new Date('2026-10-24T20:00:00Z'), new Date('2026-10-25T05:00:00Z'), TZ, '23:00', '06:00', () => false);
     expect(dst.nightMinutes).toBe(480);
   });

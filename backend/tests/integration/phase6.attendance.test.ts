@@ -353,6 +353,7 @@ describe('Phase 6: kiosk and attendance', () => {
     expect((await mk('2026-05-01T06:00:00Z', '2026-05-01T14:00:00Z')).status).toBe(201); // Friday, public holiday 08–16 local
     expect((await mk('2026-05-03T08:00:00Z', '2026-05-03T16:00:00Z')).status).toBe(201); // Sunday 10–18 local
     expect((await mk('2026-05-06T20:00:00Z', '2026-05-07T04:00:00Z', 60)).status).toBe(201); // 22–06 local
+    expect((await mk('2026-05-09T06:00:00Z', '2026-05-09T14:00:00Z')).status).toBe(201); // Saturday 08–16 local
     expect((await mk('2026-05-28T06:00:00Z', null)).status).toBe(201); // still open
     await M1().post(`/employees/${w.maria}/time-offs`, { type: 'annual_leave', startDate: '2026-05-11', endDate: '2026-05-12' });
     await M1().post(`/employees/${w.maria}/time-offs`, { type: 'sick_leave', startDate: '2026-05-18', endDate: '2026-05-18' });
@@ -365,18 +366,20 @@ describe('Phase 6: kiosk and attendance', () => {
     expect(res.body.data).toEqual([
       {
         employeeId: w.maria, employeeNumber: 'P100', lastName: 'Garcia', firstName: 'Maria', employmentType: 'full_time',
-        workedMinutes: 1320, plannedMinutes: 450, creditedAnnualMinutes: 960, creditedSickMinutes: 480, creditedSchoolMinutes: 0,
-        absenceDaysAnnual: 2, absenceDaysSick: 1, absenceDaysUnpaid: 0, nightMinutes: 420, sundayMinutes: 480, holidayMinutes: 480,
-        openOrReviewEntries: 1, timeAccountDeltaMinutes: -6840,
+        workedMinutes: 1770, plannedMinutes: 450, creditedAnnualMinutes: 960, creditedSickMinutes: 480, creditedSchoolMinutes: 0,
+        absenceDaysAnnual: 2, absenceDaysSick: 1, absenceDaysUnpaid: 0,
+        // break deducted proportionally: night 420 × 420/480 = 367.5 → 368; the other supplements 480 − 30 = 450
+        nightMinutes: 368, saturdayMinutes: 450, sundayMinutes: 450, holidayMinutes: 450,
+        openOrReviewEntries: 1, timeAccountDeltaMinutes: -6390,
       },
     ]);
     const csv = await M1().get(`/hotels/${w.h1}/payroll-export?month=2026-05&format=csv`);
     expect(csv.status).toBe(200);
     expect(csv.headers['content-type']).toMatch(/text\/csv/);
-    expect(csv.text.split('\r\n')[0]).toBe('employeeNumber,lastName,firstName,employmentType,workedMinutes,plannedMinutes,creditedAnnualMinutes,creditedSickMinutes,creditedSchoolMinutes,absenceDaysAnnual,absenceDaysSick,absenceDaysUnpaid,nightMinutes,sundayMinutes,holidayMinutes,openOrReviewEntries,timeAccountDeltaMinutes');
+    expect(csv.text.split('\r\n')[0]).toBe('employeeNumber,lastName,firstName,employmentType,workedMinutes,plannedMinutes,creditedAnnualMinutes,creditedSickMinutes,creditedSchoolMinutes,absenceDaysAnnual,absenceDaysSick,absenceDaysUnpaid,nightMinutes,saturdayMinutes,sundayMinutes,holidayMinutes,openOrReviewEntries,timeAccountDeltaMinutes');
     const att = await M1().get(`/attendance/export?hotelId=${w.h1}&from=2026-05-01&to=2026-05-31&format=csv`);
     expect(att.status).toBe(200);
-    expect(att.text.trim().split('\r\n')).toHaveLength(5);
+    expect(att.text.trim().split('\r\n')).toHaveLength(6);
     await M1().put(`/hotels/${w.h1}/attendance-lock`, { lockedUntil: '2026-05-31' });
     expect((await M1().get(`/hotels/${w.h1}/payroll-export?month=2026-05&format=json`)).body.warnings).toEqual([]);
   });
@@ -387,18 +390,24 @@ describe('Phase 6: kiosk and attendance', () => {
     await mk('2026-05-01T06:00:00Z', '2026-05-01T14:00:00Z');
     await mk('2026-05-03T08:00:00Z', '2026-05-03T16:00:00Z');
     await mk('2026-05-06T20:00:00Z', '2026-05-07T04:00:00Z', 60);
+    await mk('2026-05-09T06:00:00Z', '2026-05-09T14:00:00Z');
     await M1().post(`/employees/${w.maria}/time-offs`, { type: 'annual_leave', startDate: '2026-05-11', endDate: '2026-05-12' });
     await M1().post(`/employees/${w.maria}/time-offs`, { type: 'sick_leave', startDate: '2026-05-18', endDate: '2026-05-18' });
     const unmapped = await M1().get(`/hotels/${w.h1}/payroll-export?month=2026-05&format=datev`);
     expect(unmapped.status).toBe(422);
     expect(unmapped.body.error.code).toBe('PAYROLL_MAPPING_INCOMPLETE');
+    // LODAS is the default product with the LODAS layout pre-filled: only numbers and wage types are missing
+    const fields = unmapped.body.error.details.map((d: any) => d.field);
+    expect(fields).toContain('payroll.datev.consultantNumber');
+    expect(fields).not.toContain('payroll.datev.lineTemplate');
+    expect((await M1().get(`/hotels/${w.h1}/settings`)).body.payroll.datev.product).toBe('lodas');
     await patchSettings(w.h1, (s) => {
       s.payroll.datev = {
         product: 'lodas', consultantNumber: '1234567', clientNumber: '12345', encoding: 'windows-1252',
         headerTemplate: '[Allgemein]\n; Export für LODAS (Testmandant)\nZiel=LODAS\nVersion_SST=1.0\nBeraterNr={consultantNumber}\nMandantenNr={clientNumber}\nAbrechnungszeitraum={month}',
         recordDescriptionTemplate: '[Satzbeschreibung]\n10;u_lod_bwd_buchung_standard;pnr#bwd;abrechnung_zeitraum#bwd;buchungswert#bwd;buchungsschluessel#bwd;la_eigene#bwd;;;bs_wert_butab#bwd;\n[Bewegungsdaten]',
         lineTemplate: '10;{pnr};{date};{value};{key};{wageType};;;"{note}";',
-        wageTypes: { worked: '100', annualLeave: '200', sick: '300', school: '400', night: null, sunday: '510', holiday: '520' },
+        wageTypes: { worked: '100', annualLeave: '200', sick: '300', school: '400', night: null, saturday: '505', sunday: '510', holiday: '520' },
       };
     });
     const missingNight = await M1().get(`/hotels/${w.h1}/payroll-export?month=2026-05&format=datev`);

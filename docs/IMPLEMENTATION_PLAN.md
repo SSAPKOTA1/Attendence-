@@ -100,5 +100,6 @@ Known limits / follow-ups:
 - The DATEV golden file is hand-written from the illustrative LODAS layout in R21; replace templates and golden file with the payroll office's approved sample (O16).
 - R19 "suggested username" is left to the client (the API accepts any valid username and reports collisions as `409 DUPLICATE_RESOURCE`).
 - Rate limiting is in-process (per instance); put a shared limiter (e.g. Redis or the reverse proxy) in front when running several instances.
-- Night/Sunday/holiday minutes are computed on clock-in → clock-out; whether breaks reduce supplements depends on the collective agreement (confirm with payroll).
+- Night/Saturday/Sunday/holiday minutes: the break is deducted automatically and proportionally (owner decision, SPEC 1.7). If the collective agreement places the break at a fixed time instead, only `domain/supplements.ts` changes.
+- LODAS is the default DATEV product with pre-filled templates; consultant/client numbers and wage types still come from the payroll office.
 - Load test, security review and backup/restore drill from Phase 10 are operational tasks outside the code base.

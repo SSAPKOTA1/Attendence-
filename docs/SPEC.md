@@ -69,6 +69,13 @@ Clock-in on a **shared hotel tablet** with **name + PIN only**; **automatic dedu
 | Plan visibility | Confirmed: staff see the plan of their own departments (at every hotel they are assigned to) |
 | Payroll | DATEV Lohn export (`format=datev`), template-driven from the payroll office's official sample, refuses to run until the mapping is complete (R21) |
 
+### 1.7 What changed after v2.4 (owner decisions)
+| Topic | Change |
+|---|---|
+| Payroll product | **LODAS** confirmed. `payroll.datev.product` defaults to `lodas` and the LODAS templates are pre-filled; only consultant/client numbers and wage types remain to be entered (still verify against the payroll office's sample) |
+| Supplements | New **Saturday** supplement (`saturdayMinutes`, wage type `saturday`). The unpaid break is **deducted automatically** from night, Saturday, Sunday and holiday minutes, proportionally (worked ÷ gross) because the break time of day is not recorded |
+| Shift design | Shift templates are designed in the app (`POST/PATCH/DELETE /shifts`) by admins and managers; the seed shifts are examples only |
+
 ---
 
 ## 2. Decisions
@@ -155,10 +162,10 @@ Clock-in on a **shared hotel tablet** with **name + PIN only**; **automatic dedu
                   "kioskAllowedIps": [], "pinMaxAttempts": 5, "pinLockMinutes": 15 },
   "absence":    { "sickNoteRequiredFromDay": 4, "sickCreditMaxDays": 42 },
   "payroll":    { "nightFrom": "23:00", "nightTo": "06:00",
-                  "datev": { "product": null, "consultantNumber": null, "clientNumber": null, "encoding": "windows-1252",
-                             "headerTemplate": "", "recordDescriptionTemplate": "", "lineTemplate": "",
+                  "datev": { "product": "lodas", "consultantNumber": null, "clientNumber": null, "encoding": "windows-1252",
+                             "headerTemplate": "<LODAS [Allgemein] block>", "recordDescriptionTemplate": "<LODAS [Satzbeschreibung] + [Bewegungsdaten]>", "lineTemplate": "10;{pnr};{date};{value};{key};{wageType};;;\"{note}\";",
                              "wageTypes": { "worked": null, "annualLeave": null, "sick": null, "school": null,
-                                            "night": null, "sunday": null, "holiday": null } } },
+                                            "night": null, "saturday": null, "sunday": null, "holiday": null } } },
   "retention":  { "timeRecordsYears": 3, "inquiriesMonths": 24 }
 }
 ```
@@ -361,10 +368,10 @@ Creating annual leave needing more than `remaining` in any affected year → `42
 `GET /schedules/candidates?hotelId&date&shiftId` lists employees who could take the shift: assigned to the hotel (floating staff included) and active, department matches, no overlapping shift and no approved absence that day, no hard-block (including R18 in block mode; in warn mode candidates that would trigger minor warnings are listed but flagged). Each candidate carries the warnings the assignment would produce, weekly hours so far and their wish for that day (`prefer` / `avoid`). Order: `prefer` wishes, then no warnings, then fewer weekly hours. Read-only: the manager assigns with a normal `POST /schedules`, nobody is contacted automatically.
 
 ### R21. Payroll export
-- **Generic:** `GET /hotels/:id/payroll-export?month=YYYY-MM&format=csv|json`: per employee with entries at the hotel: personnel number, names, employment type, worked minutes (closed entries at this hotel), planned minutes, credited minutes (annual, sick, school), absence days by type, `nightMinutes` (`payroll.nightFrom`–`nightTo`), `sundayMinutes`, `holidayMinutes` (public holidays of the hotel's region), count of open/needs-review entries, time-account delta. Supplement rules depend on the collective agreement: confirm with payroll. `GET /attendance/export?hotelId&from&to&format=csv`: one line per time entry. If the month is not yet covered by `attendance_locked_until` the JSON carries `warnings: ["period_not_locked"]` (lock first, then export).
+- **Generic:** `GET /hotels/:id/payroll-export?month=YYYY-MM&format=csv|json`: per employee with entries at the hotel: personnel number, names, employment type, worked minutes (closed entries at this hotel), planned minutes, credited minutes (annual, sick, school), absence days by type, `nightMinutes` (`payroll.nightFrom`–`nightTo`), `saturdayMinutes`, `sundayMinutes`, `holidayMinutes` (public holidays of the hotel's region); the unpaid break is deducted automatically from these supplement minutes in proportion to worked ÷ gross time (1.7), count of open/needs-review entries, time-account delta. Supplement rules depend on the collective agreement: confirm with payroll. `GET /attendance/export?hotelId&from&to&format=csv`: one line per time entry. If the month is not yet covered by `attendance_locked_until` the JSON carries `warnings: ["period_not_locked"]` (lock first, then export).
 - **DATEV Lohn (required): `format=datev`.** Returns the monthly movement data (Bewegungsdaten) as an ASCII import file (`text/plain; charset=windows-1252`, CRLF, decimal comma, dates `DD.MM.YYYY`). Which DATEV payroll product is used (LODAS or Lohn und Gehalt) is **not yet known**: your external payroll office decides (`payroll.datev.product` = `lodas` or `lug` once confirmed). Because the file is template-driven, either works as long as the office supplies a sample file it has accepted; what is described below was verified for **LODAS**.
   - *What is known:* LODAS imports an ASCII file with the sections `[Allgemein]`, `[Satzbeschreibung]` (record description) and `[Bewegungsdaten]` (data lines); a movement line carries the personnel number, a date, a value, a processing key (`1` = hours, `10` = days, `71` = vacation days statistical, `72` = sick days statistical) and the client's own wage type (`la_eigene`); the record description decides **which LODAS table** the data lands in (a wrong one ends up in "Nachberechnung Standard" instead of the standard table) (DATEV community answers by DATEV staff; official reference: *Schnittstellenhandbuch LODAS*, DATEV help document 1080789).
-  - *Therefore nothing is hard-coded:* the file is produced from three templates in `payroll.datev`: `headerTemplate` (`[Allgemein]` block, placeholders `{consultantNumber}`, `{clientNumber}`, `{month}`), `recordDescriptionTemplate` and `lineTemplate` (placeholders `{pnr}`, `{date}`, `{value}`, `{key}`, `{wageType}`, `{note}`). They are copied from a sample file **your payroll office has accepted**. Lines: one per employee and wage type, value = hours (minutes ÷ 60, 2 decimals, rounded once per month and type, never per day) or days; hours = worked minutes of closed entries at this hotel plus credited minutes; supplements = night/Sunday/holiday minutes.
+  - *Therefore nothing is hard-coded:* the file is produced from three templates in `payroll.datev`: `headerTemplate` (`[Allgemein]` block, placeholders `{consultantNumber}`, `{clientNumber}`, `{month}`), `recordDescriptionTemplate` and `lineTemplate` (placeholders `{pnr}`, `{date}`, `{value}`, `{key}`, `{wageType}`, `{note}`). They are copied from a sample file **your payroll office has accepted**. Lines: one per employee and wage type, value = hours (minutes ÷ 60, 2 decimals, rounded once per month and type, never per day) or days; hours = worked minutes of closed entries at this hotel plus credited minutes; supplements = night/Saturday/Sunday/holiday minutes (break deducted).
   - *Guards:* wage-type numbers are client-specific in DATEV. Until `consultantNumber`, `clientNumber`, the templates and every wage type needed for the month are set, the export answers `422 PAYROLL_MAPPING_INCOMPLETE` listing what is missing. Employees without `employeeNumber` → `422 VALIDATION_ERROR` listing them (the personnel number must equal the one in LODAS).
   - *Acceptance:* a golden-file test against the approved sample (test 116); the first real import runs in a DATEV test client together with the payroll office. If the office uses *Lohn und Gehalt* instead of LODAS, only the three templates change (question O16).
 
@@ -731,7 +738,7 @@ GET /schedules/candidates?hotelId=1&date=2026-10-12&shiftId=3
 ```
 GET /hotels/1/payroll-export?month=2026-09&format=csv|json|datev
 columns: employeeNumber, lastName, firstName, employmentType, workedMinutes, plannedMinutes, creditedAnnualMinutes, creditedSickMinutes,
-         creditedSchoolMinutes, absenceDaysAnnual, absenceDaysSick, absenceDaysUnpaid, nightMinutes, sundayMinutes, holidayMinutes,
+         creditedSchoolMinutes, absenceDaysAnnual, absenceDaysSick, absenceDaysUnpaid, nightMinutes, saturdayMinutes, sundayMinutes, holidayMinutes,
          openOrReviewEntries, timeAccountDeltaMinutes
 GET /attendance/export?hotelId&from&to&format=csv        one line per time entry: date, employeeNumber, shift, clockIn, clockOut, breakMinutes, workedMinutes, anomalies, status
 ```
@@ -1018,7 +1025,7 @@ Each phase ends with migrations applied, endpoints implemented, listed tests gre
 | O13 | Portal languages | German + English |
 | O14 | Who answers employee questions | all managers with access to the routed hotel |
 | O15 | Shifts per employee per day | at most 2 (split shifts are rare) |
-| O16 | Which DATEV payroll product does the payroll office use, and what import file does it accept? | **Open:** payroll is prepared by an external office; product unknown. Ask the office for a sample import file, consultant/client numbers and wage-type numbers (draft e-mail provided). The export is the last item of Phase 6 and does not block the rest |
+| O16 | Which DATEV payroll product does the payroll office use, and what import file does it accept? | **Product confirmed: LODAS.** Still open: payroll is prepared by an external office; product unknown. Ask the office for a sample import file, consultant/client numbers and wage-type numbers (draft e-mail provided). The export is the last item of Phase 6 and does not block the rest |
 
 ---
 

@@ -1,5 +1,10 @@
 import { z } from 'zod';
 
+export const LODAS_HEADER = '[Allgemein]\nZiel=LODAS\nVersion_SST=1.0\nBeraterNr={consultantNumber}\nMandantenNr={clientNumber}\nAbrechnungszeitraum={month}';
+export const LODAS_RECORD_DESCRIPTION =
+  '[Satzbeschreibung]\n10;u_lod_bwd_buchung_standard;pnr#bwd;abrechnung_zeitraum#bwd;buchungswert#bwd;buchungsschluessel#bwd;la_eigene#bwd;;;bs_wert_butab#bwd;\n[Bewegungsdaten]';
+export const LODAS_LINE = '10;{pnr};{date};{value};{key};{wageType};;;"{note}";';
+
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'expected HH:mm');
 
 /** Hotel settings (spec section 4). Every level has defaults, so a partial object is completed on parse. */
@@ -78,13 +83,14 @@ export const SettingsSchema = z
         nightTo: hhmm.default('06:00'),
         datev: z
           .object({
-            product: z.enum(['lodas', 'lug']).nullable().default(null),
+            product: z.enum(['lodas', 'lug']).nullable().default('lodas'),
             consultantNumber: z.string().nullable().default(null),
             clientNumber: z.string().nullable().default(null),
             encoding: z.string().default('windows-1252'),
-            headerTemplate: z.string().default(''),
-            recordDescriptionTemplate: z.string().default(''),
-            lineTemplate: z.string().default(''),
+            // LODAS ASCII import layout (R21); verify against the sample accepted by the payroll office
+            headerTemplate: z.string().default(LODAS_HEADER),
+            recordDescriptionTemplate: z.string().default(LODAS_RECORD_DESCRIPTION),
+            lineTemplate: z.string().default(LODAS_LINE),
             wageTypes: z
               .object({
                 worked: z.string().nullable().default(null),
@@ -92,6 +98,7 @@ export const SettingsSchema = z
                 sick: z.string().nullable().default(null),
                 school: z.string().nullable().default(null),
                 night: z.string().nullable().default(null),
+                saturday: z.string().nullable().default(null),
                 sunday: z.string().nullable().default(null),
                 holiday: z.string().nullable().default(null),
               })
