@@ -40,7 +40,8 @@ async function assignmentsOf(db: Db, employeeId: number) {
 
 export async function employeeDto(db: Db, e: any, opts: { full: boolean; showBirthDate?: boolean }) {
   const t = today();
-  const assignments = (await assignmentsOf(db, e.id)).filter((a) => !a.unassigned_on || a.unassigned_on >= t);
+  const assignments = (await assignmentsOf(db, e.id)).filter((a) => !a.unassigned_on);
+  void t;
   const hotelIds = assignments.map((a) => a.hotel_id);
   const depts = await rows(
     db,

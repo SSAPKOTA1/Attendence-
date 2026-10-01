@@ -150,7 +150,9 @@ export async function getEmployeeAccess(db: Db, ctx: AuthContext, param: string 
   if (!employee || employee.company_id !== ctx.companyId) throw new AppError('RESOURCE_NOT_FOUND');
   const assignments = await rows(db, 'SELECT * FROM employee_hotels WHERE employee_id = $1', [employeeId]);
   const today = todayIn('Europe/Berlin', now());
-  const hotelIds = assignments.filter((a) => !a.unassigned_on || a.unassigned_on >= today).map((a) => a.hotel_id);
+  // current assignments: hotels the employee has not been unassigned from (history stays in allHotelIds)
+  const hotelIds = assignments.filter((a) => !a.unassigned_on).map((a) => a.hotel_id);
+  void today;
   const allHotelIds = assignments.map((a) => a.hotel_id);
   const home = assignments.find((a) => a.is_home);
   const isSelf = ctx.employeeId === employeeId;
