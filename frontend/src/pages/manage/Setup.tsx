@@ -10,9 +10,9 @@ import { Dialog, Empty, ErrorBox, Field, Loading, Tag } from '../../components/u
 import type { Department, Shift } from '../../lib/types';
 import SettingsEditor from './SettingsEditor';
 
-const TABS = ['shifts', 'departments', 'users', 'blackouts', 'hotel', 'audit'] as const;
+const TABS = ['shifts', 'departments', 'users', 'blackouts', 'holidays', 'hotel', 'audit'] as const;
 type Tab = (typeof TABS)[number];
-const TAB_LABEL: Record<Tab, string> = { shifts: 'Dienste', departments: 'Abteilungen', users: 'Benutzer', blackouts: 'Urlaubssperren', hotel: 'Hoteleinstellungen', audit: 'Protokoll' };
+const TAB_LABEL: Record<Tab, string> = { shifts: 'Dienste', departments: 'Abteilungen', users: 'Benutzer', blackouts: 'Urlaubssperren', holidays: 'Feiertage', hotel: 'Hoteleinstellungen', audit: 'Protokoll' };
 
 export default function Setup() {
   const { t } = useI18n();
@@ -29,6 +29,7 @@ export default function Setup() {
       {tab === 'departments' && <Departments hotelId={hotel.id} />}
       {tab === 'users' && <Users hotelId={hotel.id} />}
       {tab === 'blackouts' && <Blackouts hotelId={hotel.id} />}
+      {tab === 'holidays' && <Holidays hotelId={hotel.id} />}
       {tab === 'hotel' && <SettingsEditor hotelId={hotel.id} />}
       {tab === 'audit' && <Audit hotelId={hotel.id} />}
     </div>
@@ -276,6 +277,29 @@ function Blackouts({ hotelId }: { hotelId: number }) {
         </tbody></table></div>
       )}
       <span hidden>{lang}</span>
+    </section>
+  );
+}
+
+function Holidays({ hotelId }: { hotelId: number }) {
+  const { t, lang } = useI18n();
+  const [year, setYear] = useState(todayLocal().slice(0, 4));
+  const valid = /^\d{4}$/.test(year);
+  const q = useQuery({ queryKey: ['setup', 'holidays', hotelId, year], enabled: valid, queryFn: () => get('/public-holidays', { hotelId, year: Number(year) }) });
+  const fmt = new Intl.DateTimeFormat(lang, { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
+  return (
+    <section className="section">
+      <div className="section-head"><h2>{t('Feiertage')}</h2></div>
+      <p className="muted small">{t('Gesetzliche Feiertage der Region des Hotels. Sie werden bei Abwesenheiten, Gutschriften und Zuschlägen berücksichtigt.')}</p>
+      <div className="row gap wrap filters">
+        <Field label={t('Jahr')}>{(i) => <input id={i} className="input narrow" type="number" min={2000} max={2100} value={year} onChange={(e) => setYear(e.target.value)} />}</Field>
+      </div>
+      {!valid ? null : q.isLoading ? <Loading /> : q.error ? <ErrorBox error={q.error} /> : (q.data?.data ?? []).length === 0 ? <Empty>{t('Keine Feiertage.')}</Empty> : (
+        <div className="table-scroll"><table className="table">
+          <thead><tr><th>{t('Datum')}</th><th>{t('Name')}</th></tr></thead>
+          <tbody>{q.data.data.map((h: { date: string; name: string }) => <tr key={h.date}><td>{fmt.format(new Date(`${h.date}T12:00:00`))}</td><td><strong>{h.name}</strong></td></tr>)}</tbody>
+        </table></div>
+      )}
     </section>
   );
 }

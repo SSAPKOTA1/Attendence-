@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { del, get, patch, post, put } from '../../lib/api';
+import { ApiError, del, get, patch, post, put } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { useI18n } from '../../lib/i18n';
 import { fmtDays, fmtHours, todayLocal } from '../../lib/format';
@@ -74,6 +74,7 @@ export default function StaffDetail() {
           </form>
         </Section>
       )}
+      {full && user?.role === 'admin' && <AnonymizeSection emp={emp} onDone={refresh} />}
       {full && <HotelsSection emp={emp} onSaved={refresh} />}
       {full && <AllowanceSection id={id!} lang={lang} />}
       {full && <TargetsSection id={id!} />}
@@ -87,6 +88,43 @@ export default function StaffDetail() {
         </Dialog>
       )}
     </div>
+  );
+}
+
+function AnonymizeSection({ emp, onDone }: { emp: any; onDone: () => void }) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const [retentionEnds, setRetentionEnds] = useState<string | null>(null);
+  const [reason, setReason] = useState('');
+  const close = () => { setOpen(false); setRetentionEnds(null); setReason(''); };
+  const run = useMutation({
+    mutationFn: () => post(`/employees/${emp.id}/anonymize`, retentionEnds ? { force: true, reason: reason.trim() } : {}),
+    onSuccess: () => { close(); onDone(); },
+    onError: (err) => { if (err instanceof ApiError && err.code === 'RETENTION_NOT_ELAPSED') setRetentionEnds(err.details?.[0]?.retentionEndsOn ?? '?'); },
+  });
+  if (emp.anonymizedAt) return <Section title={t('Datenschutz')}><Tag kind="neutral">{t('Anonymisiert')}</Tag></Section>;
+  if (emp.status !== 'terminated') return null;
+  return (
+    <Section title={t('Datenschutz')}>
+      <p className="muted small">{t('Ersetzt Name, Kontaktdaten, Stundenlohn, Geburtsdatum, Personalnummer, PIN und Login durch neutrale Platzhalter. Dienstplan, Abwesenheiten und Zeiten bleiben für die Aufbewahrung erhalten. Das kann nicht rückgängig gemacht werden.')}</p>
+      <div><button className="btn btn-secondary" onClick={() => setOpen(true)}>{t('Anonymisieren')}</button></div>
+      {open && (
+        <Dialog title={t('Mitarbeiter anonymisieren?')} onClose={close}
+          actions={<><button className="btn btn-secondary" onClick={close}>{t('Abbrechen')}</button><button className="btn btn-primary" disabled={run.isPending || (retentionEnds !== null && !reason.trim())} onClick={() => run.mutate()}>{t('Endgültig anonymisieren')}</button></>}>
+          <div className="stack">
+            <p>{t('Auch Rückfragen dieser Person werden gelöscht. Das Protokoll bleibt unverändert.')}</p>
+            {retentionEnds !== null ? (
+              <>
+                <p className="warn small">{t('Die Aufbewahrungsfrist endet am {d}. Eine vorzeitige Anonymisierung ist nur auf Verlangen sinnvoll (z. B. Löschanspruch nach DSGVO); die Begründung wird protokolliert.', { d: retentionEnds })}</p>
+                <Field label={t('Begründung')}>{(i) => <textarea id={i} className="input" rows={3} maxLength={1000} value={reason} onChange={(e) => setReason(e.target.value)} />}</Field>
+              </>
+            ) : null}
+            {retentionEnds === null && <ErrorBox error={run.error} />}
+            {retentionEnds !== null && run.error && !(run.error instanceof ApiError && run.error.code === 'RETENTION_NOT_ELAPSED') && <ErrorBox error={run.error} />}
+          </div>
+        </Dialog>
+      )}
+    </Section>
   );
 }
 

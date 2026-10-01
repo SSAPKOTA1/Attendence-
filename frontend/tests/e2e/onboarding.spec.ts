@@ -35,3 +35,33 @@ test('managers cannot add employees (admin only) but see the staff list', async 
   await expect(page.getByRole('link', { name: /Maria Garcia/ })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Mitarbeiter anlegen' })).toHaveCount(0);
 });
+
+test('anonymisation: only for terminated staff; before the retention period a reason is required', async ({ page }) => {
+  await login(page, ADMIN);
+  await page.getByRole('link', { name: 'Mitarbeiter' }).click();
+  await page.getByRole('button', { name: 'Mitarbeiter anlegen' }).click();
+  const dlg = page.getByRole('dialog');
+  await dlg.getByLabel('Vorname').fill('Karl');
+  await dlg.getByLabel('Nachname').fill('Vergessen');
+  await dlg.getByLabel('Front Desk').check();
+  await dlg.getByRole('radio', { name: /Gehalt \(Arbeitszeitkonto\)/ }).click();
+  await dlg.getByRole('button', { name: 'Anlegen' }).click();
+  await expect(page.getByRole('heading', { name: 'Karl Vergessen' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Anonymisieren' })).toHaveCount(0); // still active
+
+  await page.getByLabel('Status').selectOption('terminated');
+  await page.getByRole('button', { name: 'Speichern' }).first().click();
+  await expect(page.getByText('Gespeichert.')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Anonymisieren' }).click();
+  const confirm = page.getByRole('dialog');
+  await confirm.getByRole('button', { name: 'Endgültig anonymisieren' }).click();
+  await expect(confirm.getByText(/Aufbewahrungsfrist endet am/)).toBeVisible(); // retention not over: ask for a reason
+  const final = confirm.getByRole('button', { name: 'Endgültig anonymisieren' });
+  await expect(final).toBeDisabled();
+  await confirm.getByLabel('Begründung').fill('Löschverlangen nach Art. 17 DSGVO');
+  await final.click();
+  await expect(page.getByRole('heading', { name: /Former employee #\d+/ })).toBeVisible();
+  await expect(page.getByText('Anonymisiert', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Anonymisieren' })).toHaveCount(0);
+});

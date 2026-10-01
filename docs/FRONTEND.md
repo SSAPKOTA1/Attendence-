@@ -72,5 +72,5 @@ The image build itself was not run in the authoring environment (no Docker daemo
 
 - The employee portal shows times in `Europe/Berlin` (the profile API does not expose the hotel's time zone); the tablet and manager screens use the hotel's own zone.
 - No offline mode: the tablet needs the network (a punch without a server time would be invalid by design).
-- Public holidays and anonymisation have no screen yet.
+- Public holidays: read-only tab "Feiertage" in Setup (PH1, per year). Anonymisation (E11): admin-only "Datenschutz" section on the staff detail page of a terminated employee; before the retention period the server answers `RETENTION_NOT_ELAPSED` and the dialog then asks for the audited reason (`force`).
 - Accessibility: semantic landmarks, labelled controls, focus rings, `role=alert/status` for messages; no full screen-reader audit has been done.
