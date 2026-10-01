@@ -355,8 +355,18 @@ export async function punch(device: DeviceContext, punchToken: string, action: '
           const parts = [...others.map((o) => ({ date: entryDate, start: new Date(o.clock_in_at), end: new Date(o.clock_out_at) })), { date: entryDate, start: clockIn, end: t }];
           const dayBreaks = breakMinutes + others.reduce((a, o) => a + o.break_minutes, 0) + gapsBetweenParts(parts).filter((g) => g >= 15).reduce((a, g) => a + g, 0);
           const dayWork = sumWorked(others) + Math.floor(gross) - breakMinutes;
-          const req = requiredBreak(dayWork + breakMinutes, es.legal.breakRules.map((r) => ({ overHours: r.grossOverHours, minMinutes: r.minMinutes })));
-          if (dayBreaks < req) newAnomalies.push({ type: 'missing_break', requiredMinutes: req, actualMinutes: Math.round(dayBreaks) });
+          if (emp.birth_date && ageOn(emp.birth_date, entryDate) < 18) {
+            // R18: working time (net) over 4.5 h needs 30 min, over 6 h needs 60 min; only blocks of >= 15 min count
+            const block = (m: number) => (m >= 15 ? m : 0);
+            const recorded = brks.reduce((a, b) => a + block(Math.floor((new Date(b.break_end_at ?? t).getTime() - new Date(b.break_start_at).getTime()) / 60_000)), 0);
+            const counted = recorded + others.reduce((a, o) => a + block(o.break_minutes), 0) + gapsBetweenParts(parts).reduce((a, g) => a + block(g), 0);
+            let required = 0;
+            for (const rule of es.legal.minors.breakRules) if (dayWork > rule.workingOverHours * 60) required = Math.max(required, rule.minMinutes);
+            if (counted < required) newAnomalies.push({ type: 'missing_break', requiredMinutes: required, actualMinutes: Math.round(counted), rule: 'minor' });
+          } else {
+            const req = requiredBreak(dayWork + breakMinutes, es.legal.breakRules.map((r) => ({ overHours: r.grossOverHours, minMinutes: r.minMinutes })));
+            if (dayBreaks < req) newAnomalies.push({ type: 'missing_break', requiredMinutes: req, actualMinutes: Math.round(dayBreaks) });
+          }
         } else {
           breakMinutes = autoBreakMinutes(gross, link ? link.breakMinutes : null, es.legal.breakRules);
         }

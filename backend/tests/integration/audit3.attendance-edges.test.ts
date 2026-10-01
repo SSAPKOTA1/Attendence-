@@ -272,4 +272,32 @@ describe('audit 3: attendance, kiosk, payroll, concurrency', () => {
     expect(res.filter((r) => r.status === 409)).toHaveLength(3);
     void advance; void createEmployee;
   });
+
+  it('recorded breaks for minors follow R18: net time rule and only blocks of >= 15 minutes count', async () => {
+    await patchSettings(w.h1, (st) => (st.attendance.breakMode = 'recorded'));
+    const dev = await pair(w.h1, w.tokens.manager1);
+    const day = async (employeeId: number, breaks: [string, string][], inAt: string, outAt: string) => {
+      const p = await pin(employeeId);
+      setNow(inAt);
+      await punch(dev, employeeId, p, 'clock_in');
+      for (const [from, to] of breaks) {
+        setNow(from);
+        await punch(dev, employeeId, p, 'break_start');
+        setNow(to);
+        await punch(dev, employeeId, p, 'break_end');
+      }
+      setNow(outAt);
+      return (await punch(dev, employeeId, p, 'clock_out')).body.anomalies.filter((a: any) => a.type === 'missing_break');
+    };
+    // 17-year-old, 5 h net work: needs 30 min; one 20 min break is not enough
+    expect(await day(w.mia, [['2026-10-01T08:00:00Z', '2026-10-01T08:20:00Z']], '2026-10-01T05:00:00Z', '2026-10-01T10:20:00Z')).toEqual([{ type: 'missing_break', requiredMinutes: 30, actualMinutes: 20, rule: 'minor' }]);
+    await q('DELETE FROM time_entries');
+    // three breaks of 10 min add up to 30 but none is a block of >= 15 min → still missing
+    const tiny = await day(w.mia, [['2026-10-02T07:00:00Z', '2026-10-02T07:10:00Z'], ['2026-10-02T08:00:00Z', '2026-10-02T08:10:00Z'], ['2026-10-02T09:00:00Z', '2026-10-02T09:10:00Z']], '2026-10-02T05:00:00Z', '2026-10-02T10:30:00Z');
+    expect(tiny[0]).toMatchObject({ requiredMinutes: 30, actualMinutes: 0 });
+    await q('DELETE FROM time_entries');
+    // one proper 35 min break is enough; an adult is judged by the adult rule on gross time (over 6 h → 30 min)
+    expect(await day(w.mia, [['2026-10-03T08:00:00Z', '2026-10-03T08:35:00Z']], '2026-10-03T05:00:00Z', '2026-10-03T10:35:00Z')).toEqual([]);
+    expect(await day(w.maria, [['2026-10-03T08:00:00Z', '2026-10-03T08:10:00Z']], '2026-10-03T05:00:00Z', '2026-10-03T11:30:00Z')).toEqual([{ type: 'missing_break', requiredMinutes: 30, actualMinutes: 10 }]);
+  });
 });
