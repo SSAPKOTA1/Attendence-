@@ -128,6 +128,7 @@ export async function decideShiftWish(db: Db, ctx: AuthContext, id: number, inpu
   const managed = ctx.role !== 'staff' && ctx.hotelIds.includes(w.hotel_id);
   if (!own && !managed) throw new AppError('RESOURCE_NOT_FOUND');
   if (!managed && input.status !== 'cancelled') throw new AppError('FORBIDDEN', { details: [{ issue: 'only managers decide wishes' }] });
+  if (managed && own && ctx.role !== 'admin' && input.status !== 'cancelled') throw new AppError('FORBIDDEN', { details: [{ issue: 'you cannot decide your own request; another manager or an admin must' }] });
   if (!managed && w.status !== 'pending') throw new AppError('INVALID_STATUS_TRANSITION');
   if (!TRANSITIONS[w.status].includes(input.status)) throw new AppError('INVALID_STATUS_TRANSITION');
   const r = await maybeOne(
@@ -206,6 +207,7 @@ export async function decideLeaveWish(db: Db, ctx: AuthContext, id: number, inpu
   const managed = access.isHomeManager && ctx.role !== 'staff';
   if (!access.isSelf && !managed) throw new AppError('RESOURCE_NOT_FOUND');
   if (!managed && input.status !== 'cancelled') throw new AppError('FORBIDDEN', { details: [{ issue: 'only managers of the home hotel decide leave wishes' }] });
+  if (managed && access.isSelf && ctx.role !== 'admin' && input.status !== 'cancelled') throw new AppError('FORBIDDEN', { details: [{ issue: 'you cannot decide your own request; another manager or an admin must' }] });
   if (!managed && w.status !== 'pending') throw new AppError('INVALID_STATUS_TRANSITION');
   if (!TRANSITIONS[w.status].includes(input.status)) throw new AppError('INVALID_STATUS_TRANSITION');
   let r;

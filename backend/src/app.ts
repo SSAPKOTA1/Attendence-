@@ -25,7 +25,7 @@ import { analyticsRouter } from './routes/analytics';
 export function createApp(): express.Express {
   const app = express();
   app.disable('x-powered-by');
-  app.set('trust proxy', 'loopback');
+  app.set('trust proxy', /^\d+$/.test(config.TRUST_PROXY) ? Number(config.TRUST_PROXY) : config.TRUST_PROXY);
   app.use(helmet());
   app.use(
     cors({

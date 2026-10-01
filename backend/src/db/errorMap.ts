@@ -15,7 +15,7 @@ export function mapDbError(err: any, ctx: DbErrorContext = {}): AppError | null 
       if (constraint === 'uq_schedule_same_shift' || constraint === 'uq_schedule_one_off') {
         return new AppError('EMPLOYEE_ALREADY_SCHEDULED');
       }
-      return new AppError('DUPLICATE_RESOURCE', { details: [{ field: constraint, issue: 'already exists' }] });
+      return new AppError('DUPLICATE_RESOURCE', { details: [{ issue: 'already exists' }] });
     case '23P01':
       if (['no_overlapping_time_offs', 'no_overlapping_sick_leave', 'no_overlapping_leave_wishes'].includes(constraint)) {
         return new AppError('TIME_OFF_OVERLAP');
@@ -23,15 +23,15 @@ export function mapDbError(err: any, ctx: DbErrorContext = {}): AppError | null 
       if (constraint === 'no_overlapping_time_entries') {
         return new AppError(ctx.timeEntrySource === 'kiosk' ? 'INVALID_PUNCH_STATE' : 'TIME_ENTRY_OVERLAP');
       }
-      return new AppError('VALIDATION_ERROR', { details: [{ field: constraint, issue: 'exclusion violation' }] });
+      return new AppError('VALIDATION_ERROR', { details: [{ issue: 'conflicting value' }] });
     case '23514':
       if (message.includes("does not work in this shift's department")) return new AppError('EMPLOYEE_NOT_IN_DEPARTMENT');
       if (message.includes('not assigned to this hotel')) return new AppError('EMPLOYEE_NOT_ASSIGNED_TO_HOTEL');
       if (message.includes('Shift overlaps another shift')) return new AppError('SHIFT_OVERLAPS_EXISTING');
       if (message.includes('Day off cannot coexist')) return new AppError('EMPLOYEE_ALREADY_SCHEDULED');
-      return new AppError('VALIDATION_ERROR', { details: [{ field: constraint || 'check', issue: 'check violation' }] });
+      return new AppError('VALIDATION_ERROR', { details: [{ issue: 'value not allowed' }] });
     case '23503':
-      return new AppError('RESOURCE_NOT_FOUND', { details: [{ field: constraint, issue: 'reference not found' }] });
+      return new AppError('RESOURCE_NOT_FOUND', { details: [{ issue: 'reference not found' }] });
     case '23502':
       return new AppError('VALIDATION_ERROR', { details: [{ field: err.column ?? 'field', issue: 'required' }] });
     case '22P02':

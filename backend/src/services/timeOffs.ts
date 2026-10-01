@@ -182,7 +182,9 @@ export async function createTimeOff(ctx: AuthContext, employeeParam: string | nu
     if (!actsAsManager && !access.isSelf) throw new AppError('FORBIDDEN', { details: [{ issue: "absences are decided by the employee's home hotel" }] });
     if (!actsAsManager && input.type === 'school') throw new AppError('FORBIDDEN', { details: [{ field: 'type', issue: 'school days are entered by managers' }] });
     if (!actsAsManager && input.unassignConflicts) throw new AppError('FORBIDDEN', { details: [{ field: 'unassignConflicts' }] });
-    const status = actsAsManager ? (input.status ?? 'approved') : 'pending';
+    // four-eyes: managers cannot approve their own absences (admins excepted)
+    const selfManaged = access.isSelf && ctx.role !== 'admin';
+    const status = actsAsManager && !selfManaged ? (input.status ?? 'approved') : 'pending';
     await db.query('SELECT id FROM employees WHERE id = $1 FOR UPDATE', [access.employeeId]);
     const p = await previewInternal(db, ctx, access, input);
     if (p.counted.total === 0) throw new AppError('NO_WORKING_DAYS_IN_RANGE');
@@ -296,6 +298,9 @@ export async function updateTimeOff(
     if (req) checkIfMatch(req, r.updated_at);
     await db.query('SELECT id FROM employees WHERE id = $1 FOR UPDATE', [access.employeeId]);
     const asManager = access.isHomeManager && ctx.role !== 'staff';
+    if (asManager && access.isSelf && ctx.role !== 'admin' && (input.status === 'approved' || input.status === 'rejected' || input.medicalCertificateReceived !== undefined)) {
+      throw new AppError('FORBIDDEN', { details: [{ issue: 'you cannot decide your own request; another manager or an admin must' }] });
+    }
     if (!asManager) {
       const onlyCancel = input.status === 'cancelled' && Object.keys(input).every((k) => k === 'status');
       if (!onlyCancel) throw new AppError('FORBIDDEN', { details: [{ issue: 'staff may only withdraw their own pending requests' }] });

@@ -56,6 +56,7 @@ tests/           unit/ (domain functions) and integration/ (one file per phase, 
 
 ## Notes for operators
 
+* `NODE_ENV` defaults to `production` (refuses the built-in dev JWT secret). Use `NODE_ENV=development` locally; set a real `JWT_SECRET` and `TRUST_PROXY` (number of proxy hops) in production. Security review: [`docs/SECURITY_REVIEW.md`](../docs/SECURITY_REVIEW.md).
 * All business timestamps come from the server clock (`src/clock.ts`); kiosk requests never carry a time.
 * Hotel legal parameters (rest period, daily/weekly limit mode, minors, breaks, retention, DATEV mapping) are hotel
   settings (`PUT /hotels/:id/settings`), not code.

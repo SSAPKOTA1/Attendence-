@@ -10,6 +10,9 @@ import { parseBody, zPassword } from '../validators/common';
 import { revokeAllSessions } from '../services/tokens';
 
 export const loginLimiter = new RateLimiter(config.LOGIN_RATE_LIMIT, 15 * 60_000);
+// public token endpoints: stop mail bombing and token guessing per IP
+export const publicLimiter = new RateLimiter(config.NODE_ENV === 'test' ? 100_000 : 20, 15 * 60_000);
+const limitPublic = (req: Request, _res: Response, next: (e?: unknown) => void) => (publicLimiter.hit(`pub:${req.path}:${req.ip}`) ? next() : next(new AppError('RATE_LIMITED')));
 const COOKIE = 'refresh_token';
 const COOKIE_PATH = '/api/v1/auth';
 
@@ -69,19 +72,19 @@ authRouter.post('/refresh', async (req, res) => {
   res.json({ accessToken: out.accessToken, refreshToken: out.refreshToken, expiresIn: config.ACCESS_TOKEN_TTL_SECONDS, user: out.user });
 });
 
-authRouter.post('/accept-invite', async (req, res) => {
+authRouter.post('/accept-invite', limitPublic, async (req, res) => {
   const body = parseBody(z.object({ token: z.string().min(10), password: zPassword }), req);
   const { session, user } = await auth.acceptInvite(body.token, body.password, meta(req));
   sessionResponse(req, res, session.accessToken, session.refreshToken, user);
 });
 
-authRouter.post('/forgot-password', async (req, res) => {
+authRouter.post('/forgot-password', limitPublic, async (req, res) => {
   const body = parseBody(z.object({ email: z.string().email().max(254) }), req);
   await auth.forgotPassword(getPool(), body.email, req.requestId);
   res.json({ ok: true });
 });
 
-authRouter.post('/reset-password', async (req, res) => {
+authRouter.post('/reset-password', limitPublic, async (req, res) => {
   const body = parseBody(z.object({ token: z.string().min(10), password: zPassword }), req);
   await auth.resetPassword(body.token, body.password, req.requestId);
   res.json({ ok: true });

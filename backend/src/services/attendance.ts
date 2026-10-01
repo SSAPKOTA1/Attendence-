@@ -135,6 +135,7 @@ export async function createManualEntry(
   return withTransaction(async (db) => {
     const hotel = await loadHotel(db, hotelId);
     await getEmployeeAccess(db, ctx, input.employeeId);
+    if (ctx.employeeId === input.employeeId && ctx.role !== 'admin') throw new AppError('FORBIDDEN', { details: [{ issue: 'you cannot decide your own request; another manager or an admin must' }] });
     await lockEmployees(db, [input.employeeId]);
     if (input.clockOutAt && input.clockOutAt <= input.clockInAt) throw new AppError('VALIDATION_ERROR', { details: [{ field: 'clockOutAt', issue: 'must be after clockInAt' }] });
     if (input.clockInAt > now()) throw new AppError('VALIDATION_ERROR', { details: [{ field: 'clockInAt', issue: 'must not be in the future' }] });
@@ -188,8 +189,9 @@ export async function managerChange(
   req?: Request,
 ) {
   return withTransaction(async (db) => {
-    const { e, managed } = await loadEntry(db, ctx, id);
+    const { e, managed, own } = await loadEntry(db, ctx, id);
     if (!managed) throw new AppError('FORBIDDEN');
+    if (own && ctx.role !== 'admin') throw new AppError('FORBIDDEN', { details: [{ issue: 'you cannot decide your own request; another manager or an admin must' }] });
     if (req) checkIfMatch(req, e.updated_at);
     if (input.clockInAt === undefined && input.clockOutAt === undefined && input.breakMinutes === undefined) {
       throw new AppError('VALIDATION_ERROR', { details: [{ issue: 'nothing to change' }] });
@@ -268,6 +270,7 @@ export async function decideCorrection(
     if (!own && !managed) throw new AppError('RESOURCE_NOT_FOUND');
     if (req) checkIfMatch(req, c.updated_at);
     if (!managed && input.status !== 'cancelled') throw new AppError('FORBIDDEN');
+    if (managed && own && ctx.role !== 'admin' && input.status !== 'cancelled') throw new AppError('FORBIDDEN', { details: [{ issue: 'you cannot decide your own request; another manager or an admin must' }] });
     if (c.status !== 'pending') throw new AppError('INVALID_STATUS_TRANSITION');
     const t = now();
     const e = await maybeOne(db, 'SELECT * FROM time_entries WHERE id = $1 FOR UPDATE', [c.time_entry_id]);

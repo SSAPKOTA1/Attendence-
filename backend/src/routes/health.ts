@@ -20,7 +20,7 @@ healthRouter.get('/ready', async (_req, res) => {
   try {
     const applied = (await getPool().query('SELECT name FROM pgmigrations')).rows.map((r) => r.name);
     const pending = migrationFiles().filter((f) => !applied.includes(f));
-    if (pending.length > 0) return res.status(503).json({ status: 'not_ready', database: 'ok', pendingMigrations: pending });
+    if (pending.length > 0) return res.status(503).json({ status: 'not_ready', database: 'ok', pendingMigrations: pending.length });
     res.json({ status: 'ready', database: 'ok', migrations: applied.length });
   } catch {
     res.status(503).json({ status: 'not_ready', database: 'unreachable' });

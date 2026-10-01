@@ -6,10 +6,13 @@ const bool = z
   .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'yes', 'on'].includes(v.toLowerCase())));
 
 const EnvSchema = z.object({
-  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  // default production: a deployment that forgets NODE_ENV must not run with development defaults
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('production'),
   PORT: z.coerce.number().int().positive().default(3000),
   DATABASE_URL: z.string().min(1).default('postgres://postgres:postgres@localhost:5432/shiftsched'),
   JWT_SECRET: z.string().min(32).default('dev-only-secret-change-me-0123456789abcdef'),
+  // number of reverse proxies in front of the app (X-Forwarded-For hops) or 'loopback'; drives req.ip for rate limits and the kiosk IP allow-list
+  TRUST_PROXY: z.string().default('loopback'),
   ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(900),
   REFRESH_TTL_DAYS: z.coerce.number().int().positive().default(30),
   REFRESH_ABSOLUTE_DAYS: z.coerce.number().int().positive().default(90),
@@ -36,7 +39,7 @@ function load(): Config {
     throw new Error(`Invalid environment: ${JSON.stringify(parsed.error.flatten().fieldErrors)}`);
   }
   if (parsed.data.NODE_ENV === 'production' && parsed.data.JWT_SECRET.startsWith('dev-only')) {
-    throw new Error('JWT_SECRET must be set in production');
+    throw new Error('JWT_SECRET must be set (NODE_ENV defaults to production; set NODE_ENV=development for local work)');
   }
   return {
     ...parsed.data,

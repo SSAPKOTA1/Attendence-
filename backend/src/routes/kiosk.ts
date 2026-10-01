@@ -22,7 +22,9 @@ async function deviceAuth(req: Request, _res: Response, next: NextFunction) {
 }
 
 // ---- public: pairing ----
-kioskRouter.post('/pair', async (req, res) => {
+// public endpoint: limit guessing of pairing codes per IP
+const pairLimiter = new RateLimiter(config.NODE_ENV === 'test' ? 100_000 : 10, 10 * 60_000);
+kioskRouter.post('/pair', (req, _res, next) => (pairLimiter.hit(`pair:${req.ip}`) ? next() : next(new AppError('RATE_LIMITED'))), async (req, res) => {
   const body = parseBody(z.object({ pairingCode: z.string().min(4).max(20) }), req);
   res.json(await kiosk.pairDevice(body.pairingCode, req.requestId));
 });
