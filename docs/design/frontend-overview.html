@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trip Inn Attendance – Frontend Overview</title>
+<style>
+  :root{--bg:#f3f2f2;--surface:#fff;--ink:#201e1d;--muted:#7d7979;--line:#d7d3d3;--accent:#ec3013;--ok:#2f7d4f;--warn:#b7791f}
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+  h1,h2,h3{margin:0 0 .5rem}
+  .brief{max-width:980px;margin:0 auto;padding:24px 16px}
+  .brief ul{margin:.25rem 0 1rem 1.2rem;padding:0}
+  .note{background:#fff2ef;border-left:4px solid var(--accent);padding:12px 16px;margin:12px 0}
+  .tabs{display:flex;flex-wrap:wrap;gap:6px;margin:16px 0}
+  .tabs button{border:1px solid var(--line);background:var(--surface);padding:8px 12px;cursor:pointer;font:inherit}
+  .tabs button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .screen{display:none}.screen.on{display:block}
+  .app{background:var(--surface);border:1px solid var(--line)}
+  .nav{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);background:#fafafa}
+  .brand{font-weight:800;margin-right:14px}.brand small{display:block;font-weight:400;color:var(--muted);font-size:11px}
+  .nav span{padding:4px 8px;font-size:13px;border:1px solid transparent}
+  .nav span.cur{border-color:var(--ink);font-weight:700}
+  .nav .sp{flex:1}
+  .pane{padding:18px}
+  table{border-collapse:collapse;width:100%;font-size:14px}
+  th,td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+  th{background:#f3f2f2}
+  .btn{display:inline-block;padding:7px 12px;border:1px solid var(--ink);background:var(--ink);color:#fff;font-size:14px}
+  .btn.sec{background:#fff;color:var(--ink)}
+  .chip{display:inline-block;padding:1px 8px;border:1px solid var(--line);font-size:12px;background:#f8f4f4}
+  .chip.ok{color:var(--ok);border-color:var(--ok)}.chip.warn{color:var(--warn);border-color:var(--warn)}.chip.bad{color:var(--accent);border-color:var(--accent)}
+  .shift{background:#ffe0d9;border-left:3px solid var(--accent);padding:2px 5px;font-size:12px;margin:2px 0}
+  .shift.b{background:#e5eefc;border-color:#3b6fd4}.shift.c{background:#e6f3ea;border-color:var(--ok)}
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+  .card{border:1px solid var(--line);padding:12px;background:#fff}
+  .big{font-size:32px;font-weight:800}
+  .muted{color:var(--muted)}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0}
+  input,select{font:inherit;padding:7px 9px;border:1px solid var(--line);background:#fff}
+  .login{max-width:340px;margin:30px auto;display:grid;gap:10px}
+  .kiosk{background:#201e1d;color:#fff;text-align:center;padding:34px 16px}
+  .kiosk .clock{font-size:56px;font-weight:800}
+  .pad{display:grid;grid-template-columns:repeat(3,64px);gap:8px;justify-content:center;margin:14px 0}
+  .pad div{border:1px solid #605d5d;padding:14px 0;font-size:20px}
+  .tablewrap{overflow-x:auto}
+</style>
+</head>
+<body>
+<div class="brief">
+  <h1>Trip Inn Attendance – Shift Scheduling and Time Tracking</h1>
+  <p class="muted">Static overview of the existing web app (plain wireframe, fake data). Purpose: give a designer the full set of screens, roles and content to redesign.</p>
+
+  <div class="note"><b>Design request.</b> Make this feel simple and modern for hotel staff. Today it has about 15 menu items shown at once for a manager, which feels overwhelming. Group navigation into 4–5 sections, add a clear "first steps" checklist for new admins, and make the tablet and phone views large and easy to tap. Keep it German-first with an English toggle (DE / EN).</div>
+
+  <h3>Who uses it</h3>
+  <ul>
+    <li><b>Manager / Admin</b> (desktop): build the roster, approve requests, check times, export payroll as Excel.</li>
+    <li><b>Employee</b> (phone): see own shifts, request leave, enter wishes, view own times.</li>
+    <li><b>Shared tablet at reception</b> (kiosk): staff clock in/out with a PIN. Must work at a glance, big buttons.</li>
+  </ul>
+
+  <h3>Current navigation (manager)</h3>
+  <p>Dienstplan · Live · Anträge · Mitarbeiter · Fragen · Zeiten · Auswertung · Tablet &amp; Export · Einrichtung · Mein Portal · Mein Dienstplan · Urlaub &amp; Abwesenheit · Wünsche · Meine Zeiten · Mitteilungen · Profil</p>
+
+  <h3>Screens</h3>
+  <div class="tabs" id="tabs"></div>
+
+  <div id="screens">
+
+  <div class="screen" data-title="Login">
+    <div class="app"><div class="pane">
+      <div class="login">
+        <div class="brand">Trip Inn <small>Dienstplan &amp; Zeiterfassung</small></div>
+        <input placeholder="E-Mail"><input type="password" placeholder="Passwort">
+        <span class="btn">Anmelden</span>
+        <span class="muted">Passwort vergessen?</span>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="screen" data-title="Roster (manager)">
+    <div class="app">
+      <div class="nav"><div class="brand">Trip Inn<small>Dienstplan &amp; Zeiterfassung</small></div><span class="cur">Dienstplan</span><span>Live</span><span>Anträge <b class="chip bad">3</b></span><span>Mitarbeiter</span><span>Fragen</span><span>Zeiten</span><span>Auswertung</span><span>Tablet &amp; Export</span><span>Einrichtung</span><span class="sp"></span><span>DE | EN</span></div>
+      <div class="pane">
+        <div class="row"><h2 style="margin:0">Dienstplan</h2><select><option>Rezeption</option><option>Service</option><option>Housekeeping</option></select><span class="btn sec">&lt;</span><b>KW 40 · 28.09. – 04.10.</b><span class="btn sec">&gt;</span><span class="sp" style="flex:1"></span><span class="btn sec">Veröffentlichen</span><span class="btn">+ Dienst</span></div>
+        <div class="tablewrap"><table>
+          <tr><th>Mitarbeiter</th><th>Mo 28</th><th>Di 29</th><th>Mi 30</th><th>Do 01</th><th>Fr 02</th><th>Sa 03</th><th>So 04</th><th>Std.</th></tr>
+          <tr><td>Anna Becker</td><td><div class="shift">Früh 06–14</div></td><td><div class="shift">Früh 06–14</div></td><td></td><td><div class="shift b">Spät 14–22</div></td><td><div class="shift b">Spät 14–22</div></td><td></td><td></td><td>32</td></tr>
+          <tr><td>Murat Yilmaz</td><td></td><td><div class="shift b">Spät 14–22</div></td><td><div class="shift b">Spät 14–22</div></td><td><div class="shift b">Spät 14–22</div></td><td></td><td><div class="shift c">Nacht 22–06</div></td><td><div class="shift c">Nacht 22–06</div></td><td>40</td></tr>
+          <tr><td>Lena Fischer <span class="chip warn">Azubi</span></td><td><div class="shift">Früh 08–16</div></td><td><div class="shift">Früh 08–16</div></td><td><div class="shift">Früh 08–16</div></td><td><span class="chip">Urlaub</span></td><td><span class="chip">Urlaub</span></td><td></td><td></td><td>24</td></tr>
+          <tr><td>Jonas Wolf</td><td><div class="shift b">Spät 14–22</div></td><td></td><td><div class="shift">Früh 06–14</div> <span class="chip bad">Ruhezeit!</span></td><td></td><td><div class="shift">Früh 06–14</div></td><td><div class="shift">Früh 06–14</div></td><td></td><td>32</td></tr>
+        </table></div>
+        <p class="muted">Warnings appear inline (rest period, youth protection, below/above target hours). Short-notice changes are flagged.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="screen" data-title="Live">
+    <div class="app"><div class="pane">
+      <h2>Live – heute</h2>
+      <div class="grid2">
+        <div class="card"><div class="big">7</div>Anwesend</div>
+        <div class="card"><div class="big">2</div>Erwartet, noch nicht da <span class="chip warn">Verspätung</span></div>
+        <div class="card"><div class="big">1</div>Offener Eintrag zur Prüfung</div>
+      </div>
+      <table style="margin-top:12px"><tr><th>Name</th><th>Dienst</th><th>Eingestempelt</th><th>Status</th></tr>
+        <tr><td>Anna Becker</td><td>Früh 06–14</td><td>05:58</td><td><span class="chip ok">anwesend</span></td></tr>
+        <tr><td>Jonas Wolf</td><td>Früh 06–14</td><td>–</td><td><span class="chip warn">12 Min. zu spät</span></td></tr>
+      </table>
+    </div></div>
+  </div>
+
+  <div class="screen" data-title="Requests">
+    <div class="app"><div class="pane">
+      <h2>Anträge</h2>
+      <table><tr><th>Mitarbeiter</th><th>Art</th><th>Zeitraum</th><th>Hinweis</th><th></th></tr>
+        <tr><td>Lena Fischer</td><td>Urlaub</td><td>01.10. – 02.10.</td><td>Rest: 18 Tage</td><td><span class="btn">Genehmigen</span> <span class="btn sec">Ablehnen</span></td></tr>
+        <tr><td>Murat Yilmaz</td><td>Krank</td><td>06.10. – 08.10.</td><td>Krankschreibung ab Tag 3</td><td><span class="btn">Genehmigen</span> <span class="btn sec">Ablehnen</span></td></tr>
+        <tr><td>Anna Becker</td><td>Dienst tauschen</td><td>Sa 10.10.</td><td>mit Jonas Wolf</td><td><span class="btn">Genehmigen</span> <span class="btn sec">Ablehnen</span></td></tr>
+      </table>
+    </div></div>
+  </div>
+
+  <div class="screen" data-title="Staff">
+    <div class="app"><div class="pane">
+      <div class="row"><h2 style="margin:0">Mitarbeiter</h2><input placeholder="Suchen…"><select><option>Aktiv</option><option>Ausgeschieden</option></select><span style="flex:1"></span><span class="btn">+ Mitarbeiter</span></div>
+      <table><tr><th>Nr.</th><th>Name</th><th>Abteilung</th><th>Vertrag</th><th>Soll Std./Woche</th><th>Status</th></tr>
+        <tr><td>1001</td><td>Anna Becker</td><td>Rezeption</td><td>Teilzeit</td><td>32</td><td><span class="chip ok">aktiv</span></td></tr>
+        <tr><td>1002</td><td>Murat Yilmaz</td><td>Rezeption</td><td>Vollzeit</td><td>40</td><td><span class="chip ok">aktiv</span></td></tr>
+        <tr><td>1003</td><td>Lena Fischer</td><td>Service</td><td>Azubi</td><td>24</td><td><span class="chip ok">aktiv</span></td></tr>
+      </table>
+      <p class="muted">Detail page: master data, contract, vacation balance, login invite, tablet PIN reset, history. Anonymize option for former employees (admin only).</p>
+    </div></div>
+  </div>
+
+  <div class="screen" data-title="Times (manager)">
+    <div class="app"><div class="pane">
+      <div class="row"><h2 style="margin:0">Zeiten</h2><select><option>Oktober 2026</option></select><select><option>Alle Abteilungen</option></select></div>
+      <table><tr><th>Datum</th><th>Name</th><th>Plan</th><th>Gestempelt</th><th>Pause</th><th>Netto</th><th>Status</th></tr>
+        <tr><td>01.10.</td><td>Anna Becker</td><td>14–22</td><td>13:56 – 22:04</td><td>30</td><td>7,6</td><td><span class="chip ok">ok</span></td></tr>
+        <tr><td>01.10.</td><td>Murat Yilmaz</td><td>14–22</td><td>14:02 – offen</td><td>–</td><td>–</td><td><span class="chip bad">prüfen</span> <span class="btn sec">Schließen</span></td></tr>
+      </table>
+    </div></div>
+  </div>
+
+  <div class="screen" data-title="Devices &amp; export">
+    <div class="app"><div class="pane">
+      <h2>Tablet &amp; Export</h2>
+      <div class="grid2">
+        <div class="card"><h3>Tablet koppeln</h3><p class="muted">Code auf dem Tablet eingeben.</p><span class="btn">Kopplungscode erzeugen</span><p class="big">483 921</p></div>
+        <div class="card"><h3>Lohn-Export</h3>
+          <div class="row"><select><option>Oktober 2026</option></select><select><option>Excel-Tabelle (.xlsx)</option><option>CSV</option><option>JSON</option><option>DATEV LODAS</option></select></div>
+          <span class="btn">Herunterladen</span></div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="screen" data-title="Setup">
+    <div class="app"><div class="pane">
+      <h2>Einrichtung</h2>
+      <div class="row"><span class="chip">Abteilungen</span><span class="chip">Dienste</span><span class="chip">Feiertage</span><span class="chip">Hoteleinstellungen</span></div>
+      <div class="note">Idea: a "first steps" checklist here – 1 Hotel · 2 Abteilungen · 3 Dienste · 4 Mitarbeiter · 5 Dienstplan · 6 Tablet.</div>
+      <table><tr><th>Abteilung</th><th>Mitarbeiter</th><th></th></tr><tr><td>Rezeption</td><td>6</td><td>Bearbeiten</td></tr><tr><td>Service</td><td>9</td><td>Bearbeiten</td></tr></table>
+      <p class="muted">Hoteleinstellungen is a long form (working-time law, youth protection, break rules, roster, kiosk, absence, payroll, retention) – needs better grouping.</p>
+    </div></div>
+  </div>
+
+  <div class="screen" data-title="Employee portal (phone)">
+    <div class="app" style="max-width:380px;margin:auto">
+      <div class="nav"><div class="brand">Trip Inn</div><span class="cur">Übersicht</span><span>Dienstplan</span><span>Urlaub</span><span>Wünsche</span><span>Zeiten</span></div>
+      <div class="pane">
+        <h3>Hallo Anna</h3>
+        <div class="card"><div class="muted">Nächster Dienst</div><div class="big" style="font-size:24px">Fr 02.10. · Spät 14–22</div>Rezeption</div>
+        <div class="card" style="margin-top:8px"><div class="muted">Urlaubstage übrig</div><div class="big">18</div><span class="btn">Urlaub beantragen</span></div>
+        <div class="card" style="margin-top:8px"><div class="muted">Dieser Monat</div><div class="big">96,5 Std.</div>Soll 128 · Plus 3,5</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="screen" data-title="Tablet / kiosk">
+    <div class="kiosk">
+      <div class="muted" style="color:#bab6b6">Rezeption · Trip Inn Frankfurt</div>
+      <div class="clock">14:02</div>
+      <div>Donnerstag, 1. Oktober 2026</div>
+      <p>Personalnummer</p>
+      <div class="chip" style="font-size:20px;padding:6px 22px;color:#fff">1002</div>
+      <div class="pad"><div>1</div><div>2</div><div>3</div><div>4</div><div>5</div><div>6</div><div>7</div><div>8</div><div>9</div><div>⌫</div><div>0</div><div>OK</div></div>
+      <div class="row" style="justify-content:center"><span class="btn" style="background:#2f7d4f;border-color:#2f7d4f;padding:14px 28px">Kommen</span><span class="btn" style="background:#ec3013;border-color:#ec3013;padding:14px 28px">Gehen</span><span class="btn sec" style="padding:14px 28px">Pause</span></div>
+    </div>
+  </div>
+
+  </div>
+</div>
+<script>
+  const screens=[...document.querySelectorAll('.screen')], tabs=document.getElementById('tabs');
+  screens.forEach((s,i)=>{const b=document.createElement('button');b.textContent=s.dataset.title;b.onclick=()=>show(i);tabs.appendChild(b)});
+  function show(i){screens.forEach((s,j)=>s.classList.toggle('on',i===j));[...tabs.children].forEach((b,j)=>b.classList.toggle('on',i===j))}
+  show(1);
+</script>
+</body>
+</html>
