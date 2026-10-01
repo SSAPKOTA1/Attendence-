@@ -2,6 +2,8 @@ import { Db, maybeOne, rows } from '../db/pool';
 import { AppError } from '../errors/AppError';
 import { SettingsSchema } from '../domain/settings';
 import type { AuthContext } from '../types/context';
+import { todayIn } from '../domain/dates';
+import { now } from '../clock';
 import { audit } from './audit';
 import { loadHotel, mapHotel } from './access';
 
@@ -80,11 +82,12 @@ export async function updateHotel(db: Db, ctx: AuthContext, id: number, input: {
 
 export async function deleteHotel(db: Db, ctx: AuthContext, id: number) {
   await loadHotel(db, id, ctx.companyId);
+  const hotel = await loadHotel(db, id, ctx.companyId);
   const inUse = await maybeOne(
     db,
     `SELECT 1 FROM employee_hotels WHERE hotel_id = $1 AND unassigned_on IS NULL
-     UNION ALL SELECT 1 FROM schedules WHERE hotel_id = $1 AND date >= CURRENT_DATE LIMIT 1`,
-    [id],
+     UNION ALL SELECT 1 FROM schedules WHERE hotel_id = $1 AND date >= $2::date LIMIT 1`,
+    [id, todayIn(hotel.timezone, now())],
   );
   if (inUse) throw new AppError('RESOURCE_IN_USE');
   await db.query('UPDATE hotels SET deleted_at = now() WHERE id = $1', [id]);

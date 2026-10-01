@@ -8,6 +8,8 @@
     "rootDir": "."
   },
   "include": [
-    "src"
+    "src",
+    "scripts/migrate.ts",
+    "scripts/bootstrap.ts"
   ]
 }

@@ -24,7 +24,8 @@ async function workedBetween(db: Db, employeeId: number, from: string, to: strin
   const list = await rows(
     db,
     `SELECT te.* FROM time_entries te JOIN hotels h ON h.id = te.hotel_id
-      WHERE te.employee_id = $1 AND te.status = 'closed' AND (te.clock_in_at AT TIME ZONE h.timezone)::date BETWEEN $2 AND $3`,
+      WHERE te.employee_id = $1 AND te.status = 'closed' AND te.approval_status IN ('not_required','approved')
+        AND (te.clock_in_at AT TIME ZONE h.timezone)::date BETWEEN $2 AND $3`,
     [employeeId, from, to],
   );
   return list.reduce((a, e) => a + (workedMinutes(new Date(e.clock_in_at), new Date(e.clock_out_at), e.break_minutes) ?? 0), 0);
@@ -64,6 +65,7 @@ export async function dashboard(db: Db, ctx: AuthContext) {
   const pendingWishes =
     (await maybeOne(db, `SELECT count(*)::int n FROM employee_shift_wishes WHERE employee_id = $1 AND status = 'pending'`, [employeeId])).n +
     (await maybeOne(db, `SELECT count(*)::int n FROM employee_leave_wishes WHERE employee_id = $1 AND status = 'pending'`, [employeeId])).n;
+  const awaitingApproval = (await maybeOne(db, `SELECT count(*)::int n FROM time_entries WHERE employee_id = $1 AND approval_status = 'pending'`, [employeeId])).n;
   const pendingCorrections = (await maybeOne(db, `SELECT count(*)::int n FROM time_entry_corrections WHERE employee_id = $1 AND status = 'pending'`, [employeeId])).n;
   const inquiriesOpen = (await maybeOne(db, `SELECT count(*)::int n FROM inquiries WHERE employee_id = $1 AND status = 'open'`, [employeeId])).n;
   const inquiriesAnswered = (await maybeOne(db, `SELECT count(*)::int n FROM inquiries WHERE employee_id = $1 AND status = 'answered'`, [employeeId])).n;
@@ -94,7 +96,7 @@ export async function dashboard(db: Db, ctx: AuthContext) {
     },
     timeAccount: { enabled: account.timeAccountEnabled, balanceHours: account.balanceHours },
     vacation: { year: vacation.year, remainingDays: vacation.remainingDays, pendingDays: vacation.pendingDays, usedDays: vacation.usedDays },
-    pending: { timeOffs: pendingTimeOffs, wishes: pendingWishes, corrections: pendingCorrections, inquiriesAwaitingAnswer: inquiriesOpen },
+    pending: { timeOffs: pendingTimeOffs, wishes: pendingWishes, corrections: pendingCorrections, timeEntriesAwaitingApproval: awaitingApproval, inquiriesAwaitingAnswer: inquiriesOpen },
     unread: { notifications: unread, inquiriesAnswered },
     planPublishedUntil: published.map((p) => ({ hotelId: p.id, hotelName: p.name, date: p.until })),
     serverTime: t.toISOString(),

@@ -45,6 +45,7 @@ attendanceRouter.get('/attendance', async (req, res) => {
       employeeId: z.union([z.literal('me'), z.string().regex(/^\d+$/)]).optional(),
       status: z.enum(['open', 'closed', 'needs_review']).optional(),
       anomaly: z.string().max(40).optional(),
+      approvalStatus: z.enum(['not_required', 'pending', 'approved', 'rejected']).optional(),
     }),
     req,
   );
@@ -112,6 +113,11 @@ attendanceRouter.patch('/attendance/:id', requireRole('manager'), async (req, re
     req,
   );
   res.json(await att.managerChange(req.ctx!, idParam(req), body, req));
+});
+
+attendanceRouter.patch('/attendance/:id/approval', requireRole('manager'), async (req, res) => {
+  const body = parseBody(z.object({ status: z.enum(['approved', 'rejected']), note: z.string().max(1000).nullable().optional() }), req);
+  res.json(await att.decideApproval(req.ctx!, idParam(req), body));
 });
 
 attendanceRouter.post('/attendance/:id/corrections', async (req, res) => {

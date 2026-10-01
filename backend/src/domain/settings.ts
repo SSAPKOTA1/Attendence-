@@ -66,6 +66,7 @@ export const SettingsSchema = z
         lateToleranceMinutes: z.number().int().min(0).default(5),
         overtimeToleranceMinutes: z.number().int().min(0).default(15),
         needsReviewAfterHours: z.number().positive().default(14),
+        autoCloseAfterPlannedEndHours: z.number().positive().nullable().default(5),
         kioskAllowedIps: z.array(z.string()).default([]),
         pinMaxAttempts: z.number().int().min(1).default(5),
         pinLockMinutes: z.number().int().min(1).default(15),
@@ -75,6 +76,9 @@ export const SettingsSchema = z
       .object({
         sickNoteRequiredFromDay: z.number().int().min(1).default(4),
         sickCreditMaxDays: z.number().int().min(0).default(42),
+        // automatic carry-over into the next year: last day it may be used (MM-DD, null = never lapses) and an optional cap
+        carryOverExpiresOn: z.string().regex(/^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/).nullable().default('03-31'),
+        maxCarryOverDays: z.number().min(0).nullable().default(null),
       })
       .default({}),
     payroll: z

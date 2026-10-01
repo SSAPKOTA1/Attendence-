@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { getPool } from '../db/pool';
 import { logger } from '../logger';
-import { markNeedsReview } from '../services/attendance';
+import { autoCloseForgottenClockOuts, markNeedsReview } from '../services/attendance';
 import { disableTerminatedUsers, inquiryRetention, tokenCleanup } from '../services/retention';
 import { sendDueNotificationEmails } from './notificationMailer';
 
@@ -37,7 +37,10 @@ function job(name: string, key: number, fn: () => Promise<unknown>) {
 export function startJobs(): () => void {
   const db = getPool();
   const tasks = [
-    cron.schedule('5 * * * *', job('needsReview', 1, () => markNeedsReview(db))),
+    cron.schedule('5 * * * *', job('needsReview', 1, async () => {
+      await autoCloseForgottenClockOuts(db);
+      await markNeedsReview(db);
+    })),
     cron.schedule('* * * * *', job('notificationMailer', 2, () => sendDueNotificationEmails(db))),
     cron.schedule('15 3 * * *', job('tokenCleanup', 3, () => tokenCleanup(db))),
     cron.schedule('25 3 * * *', job('inquiryRetention', 4, () => inquiryRetention(db))),

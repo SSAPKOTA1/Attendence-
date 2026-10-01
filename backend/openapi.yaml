@@ -184,6 +184,24 @@ components:
         publicHolidaysOff:
           type: boolean
           default: true
+        vacation:
+          type: object
+          description: onboarding balance (SPEC 1.14)
+          properties:
+            year:
+              type: integer
+            vacationDaysPerYear:
+              type: number
+            carriedOverDays:
+              type: number
+            remainingThisYearDays:
+              type: number
+            carryOverExpiresOn:
+              type:
+                - string
+                - "null"
+          required:
+            - vacationDaysPerYear
         status:
           enum:
             - active
@@ -417,6 +435,28 @@ components:
           type: array
           items:
             type: object
+        unplannedReason:
+          type:
+            - string
+            - "null"
+        approvalStatus:
+          enum:
+            - not_required
+            - pending
+            - approved
+            - rejected
+        approvedById:
+          type:
+            - integer
+            - "null"
+        approvedAt:
+          type:
+            - string
+            - "null"
+        approvalNote:
+          type:
+            - string
+            - "null"
     HotelSettings:
       type: object
       description: See spec section 4 (legal, roster, portal, wishes, attendance, absence, payroll, retention)
@@ -4667,7 +4707,7 @@ paths:
       operationId: K4
       tags:
         - Kiosk
-      summary: "K4: clock_in | clock_out | break_start | break_end (server time)"
+      summary: "K4: clock_in | clock_out | break_start | break_end (server time); clock_in without a planned shift needs `reason` (422 UNPLANNED_REASON_REQUIRED)"
       description: "Role: kiosk device token."
       security:
         - deviceToken: []
@@ -5683,7 +5723,7 @@ paths:
       operationId: AT11
       tags:
         - Attendance
-      summary: "AT11: Payroll export (json | csv | datev)"
+      summary: "AT11: Payroll export (json | csv | datev); unapproved unplanned hours are excluded and reported"
       description: "Role: manager and up."
       security:
         - bearer: []
@@ -5731,6 +5771,77 @@ paths:
                 $ref: "#/components/schemas/Error"
         "404":
           description: RESOURCE_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /attendance/{id}/approval:
+    patch:
+      operationId: AT12
+      tags:
+        - Attendance
+      summary: "AT12: Approve / reject the hours of an unplanned clock-in (closed entries; not your own)"
+      description: "Role: manager and up."
+      security:
+        - bearer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Numeric id ('me' allowed for /employees/{id}/...)
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        "400":
+          description: VALIDATION_ERROR
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: UNAUTHENTICATED / DEVICE_UNAUTHORIZED
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: FORBIDDEN
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: RESOURCE_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "412":
+          description: PRECONDITION_FAILED (If-Match)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: Business rule violated
           content:
             application/json:
               schema:

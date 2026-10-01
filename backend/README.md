@@ -34,6 +34,8 @@ npm run dev                     # http://localhost:3000/api/v1, docs at /api/v1/
 | `npm run build` && `npm start` | Compile to `dist/` and run |
 | `npm run migrate` | Forward-only migrations |
 | `npx tsx scripts/gen-openapi.ts` | Regenerate `openapi.yaml` from the endpoint catalog |
+| `npm run loadtest` | Seeds a throw-away database with 150 employees and times the heavy endpoints under load |
+| `npm run migrate:prod` / `npm run bootstrap:prod` | Compiled migration runner and first company/admin creation for production (see `docs/DEPLOYMENT.md`) |
 
 ## Layout
 
@@ -50,7 +52,8 @@ src/
                  attendance, payroll, wishes, portal, inquiries, analytics, retention, ...)
   routes/        thin routers: zod parse → service → respond
   jobs/          needs-review, notification e-mails, token cleanup, inquiry retention, terminated users
-scripts/         migrate, seed, gen-openapi, db-roles.sql
+scripts/         migrate, bootstrap, seed, loadtest, gen-openapi, db-roles.sql
+Dockerfile       multi-stage production image (see ../docs/DEPLOYMENT.md)
 tests/           unit/ (domain functions) and integration/ (one file per phase, spec section 10 numbers in test names)
 ```
 

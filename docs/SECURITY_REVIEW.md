@@ -26,6 +26,14 @@ Scope: all of `backend/src`, migrations, scripts and the CI workflow. Method: au
 | 5 | Low | Duplicate/constraint errors returned database constraint names. | Generic messages only. |
 | 6 | Low | `/ready` exposed the names of pending migrations publicly. | Returns only the count. |
 
+## Second pass (audit)
+| # | Severity | Finding | Fix |
+|---|---|---|---|
+| 7 | Medium | **Account-existence oracle by timing**: the dummy bcrypt hash used for unknown logins had cost 4 while real hashes use cost 12, so an unknown login answered ~60× faster than a wrong password. The kiosk PIN path compared against a malformed hash (instant). | Dummy hash uses the configured cost for both paths (measured 333 ms vs 335 ms at cost 12). |
+| 8 | Low | `forgot-password` awaited the SMTP send only for known accounts. | Send is fire-and-forget; failures are logged. |
+| 9 | Medium | Browser clients could not read `ETag`/`Location` (not exposed through CORS), so `If-Match` concurrency would silently not work in a browser. | `exposedHeaders`, explicit allowed headers and methods; tested. |
+| 10 | Medium | No way to create the first admin in production (seed refuses production). | `bootstrap:prod` creates company, hotel and an invited admin; refuses a non-empty database. |
+
 ## Accepted risks / follow-ups (not changed)
 - **Account lock reveals existing accounts** (required by spec test 2): after 10 failures a real account answers `423`, an unknown one keeps answering `401`. Mitigated by the 5-attempts-per-15-minutes limit per IP and login.
 - **Rate limiters are in-process**: with several instances the effective limits multiply; use a shared limiter or the reverse proxy.

@@ -17,8 +17,8 @@ describe('every catalogued endpoint is routed', () => {
   });
   afterAll(() => closePool());
 
-  it('catalog has all 121 operations of spec section 8', () => {
-    expect(ops).toHaveLength(121);
+  it('catalog has all 122 operations of spec section 8', () => {
+    expect(ops).toHaveLength(122);
   });
 
   it.each(ops)('$id $method $path', async ({ method, path: p }) => {

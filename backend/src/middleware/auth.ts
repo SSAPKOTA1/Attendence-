@@ -29,16 +29,15 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
   } catch (err: any) {
     return next(new AppError(err?.name === 'TokenExpiredError' ? 'TOKEN_EXPIRED' : 'UNAUTHENTICATED'));
   }
-  const access = await loadUserAccess(getPool(), Number(payload.sub));
+  // a revoked session (logout, password reset, revoked device) cannot keep using its access token
+  const [access, live] = await Promise.all([
+    loadUserAccess(getPool(), Number(payload.sub)),
+    payload.sid
+      ? getPool().query('SELECT 1 FROM refresh_tokens WHERE family_id = $1 AND revoked_at IS NULL LIMIT 1', [payload.sid])
+      : Promise.resolve(null),
+  ]);
   if (!access) return next(new AppError('UNAUTHENTICATED'));
-  if (payload.sid) {
-    // a revoked session (logout, password reset, revoked device) cannot keep using its access token
-    const live = await getPool().query(
-      'SELECT 1 FROM refresh_tokens WHERE family_id = $1 AND revoked_at IS NULL LIMIT 1',
-      [payload.sid],
-    );
-    if (live.rowCount === 0) return next(new AppError('UNAUTHENTICATED'));
-  }
+  if (live && live.rowCount === 0) return next(new AppError('UNAUTHENTICATED'));
   if (!userLimiter.hit(`u:${access.userId}`)) return next(new AppError('RATE_LIMITED'));
   req.ctx = {
     ...access,

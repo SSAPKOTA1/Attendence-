@@ -8,6 +8,7 @@ import { addDays, localDate, todayIn } from '../domain/dates';
 import { shiftInstants } from '../domain/instants';
 import { displayName } from '../domain/names';
 import { workedMinutes } from '../domain/anomalies';
+import { shownWorkedMinutes } from '../domain/approval';
 import { now } from '../clock';
 import { checkIfMatch } from '../middleware/etag';
 import { audit } from './audit';
@@ -46,11 +47,16 @@ export function timeEntryDto(e: any, corrections?: any[]) {
     clockInAt: e.clock_in_at,
     clockOutAt: e.clock_out_at,
     breakMinutes: e.break_minutes,
-    workedMinutes: workedMinutes(new Date(e.clock_in_at), e.clock_out_at ? new Date(e.clock_out_at) : null, e.break_minutes),
+    workedMinutes: shownWorkedMinutes(e, workedMinutes(new Date(e.clock_in_at), e.clock_out_at ? new Date(e.clock_out_at) : null, e.break_minutes)),
     sourceIn: e.source_in,
     sourceOut: e.source_out,
     anomalies: e.anomalies ?? [],
     note: e.note,
+    unplannedReason: e.unplanned_reason,
+    approvalStatus: e.approval_status,
+    approvedById: e.approved_by_id,
+    approvedAt: e.approved_at,
+    approvalNote: e.approval_note,
     updatedAt: e.updated_at,
   };
   if (corrections) dto.corrections = corrections.map(correctionDto);
@@ -84,7 +90,7 @@ export async function getEntry(db: Db, ctx: AuthContext, id: number) {
 export async function listEntries(
   db: Db,
   ctx: AuthContext,
-  q: { hotelId?: number; from: string; to: string; employeeId?: string; status?: string; anomaly?: string },
+  q: { hotelId?: number; from: string; to: string; employeeId?: string; status?: string; anomaly?: string; approvalStatus?: string },
 ) {
   let employeeFilter: number | null = null;
   let hotelId: number | null = null;
@@ -104,8 +110,9 @@ export async function listEntries(
         AND (te.clock_in_at AT TIME ZONE h.timezone)::date BETWEEN $3 AND $4
         AND ($5::text IS NULL OR te.status = $5)
         AND ($6::text IS NULL OR te.anomalies @> jsonb_build_array(jsonb_build_object('type', $6::text)))
+        AND ($7::text IS NULL OR te.approval_status = $7)
       ORDER BY te.clock_in_at`,
-    [hotelId, employeeFilter, q.from, q.to, q.status ?? null, q.anomaly ?? null],
+    [hotelId, employeeFilter, q.from, q.to, q.status ?? null, q.anomaly ?? null, q.approvalStatus ?? null],
   );
   return { data: list.map((e) => timeEntryDto(e)) };
 }
@@ -302,6 +309,39 @@ export async function decideCorrection(
   });
 }
 
+/**
+ * AT12 (SPEC 1.12): a supervisor of the entry's hotel (or an admin) approves or rejects the hours of unplanned work.
+ * Only closed entries can be decided; nobody decides their own hours (admins excepted); a rejection needs a note.
+ * Decisions change payroll-relevant hours, so the period lock applies.
+ */
+export async function decideApproval(ctx: AuthContext, id: number, input: { status: 'approved' | 'rejected'; note?: string | null }) {
+  return withTransaction(async (db) => {
+    const { e, managed, own } = await loadEntry(db, ctx, id);
+    if (!managed) throw new AppError('FORBIDDEN');
+    if (own && ctx.role !== 'admin') throw new AppError('FORBIDDEN', { details: [{ issue: 'you cannot approve your own hours; another manager or an admin must' }] });
+    if (e.approval_status === 'not_required') throw new AppError('INVALID_STATUS_TRANSITION', { details: [{ issue: 'this entry belongs to a planned shift and needs no approval' }] });
+    if (e.status !== 'closed') throw new AppError('INVALID_STATUS_TRANSITION', { details: [{ issue: 'the hours are not final yet: the entry must be closed first' }] });
+    if (e.approval_status === input.status) throw new AppError('INVALID_STATUS_TRANSITION', { details: [{ issue: `already ${input.status}` }] });
+    const note = input.note?.trim() || null;
+    if (input.status === 'rejected' && !note) throw new AppError('VALIDATION_ERROR', { details: [{ field: 'note', issue: 'a rejection needs a note for the employee' }] });
+    const hotel = await loadHotel(db, e.hotel_id);
+    const override = checkLock(hotel, [new Date(e.clock_in_at)], ctx, note);
+    const updated = await maybeOne(
+      db,
+      `UPDATE time_entries SET approval_status = $2, approved_by_id = $3, approved_at = $4, approval_note = $5 WHERE id = $1 RETURNING *`,
+      [id, input.status, ctx.userId, now(), note],
+    );
+    await notify(db, { userIds: await userIdsOfEmployee(db, e.employee_id), kind: 'time_approval_decided', params: { status: input.status, timeEntryId: id }, entityType: 'time_entry', entityId: id });
+    await audit(db, ctx, {
+      action: `attendance.approval_${input.status}`, entityType: 'time_entry', entityId: id, hotelId: e.hotel_id,
+      before: { approvalStatus: e.approval_status }, after: { approvalStatus: updated.approval_status },
+      meta: { workedMinutes: workedMinutes(new Date(e.clock_in_at), new Date(e.clock_out_at), e.break_minutes), ...(override ? { lockOverride: true, adminReason: note } : {}) },
+    });
+    const corr = await rows(db, 'SELECT * FROM time_entry_corrections WHERE time_entry_id = $1 ORDER BY id', [id]);
+    return timeEntryDto(updated, corr);
+  });
+}
+
 /** AT8 live board. */
 export async function liveBoard(db: Db, ctx: AuthContext, q: { hotelId?: number; departmentId?: number }) {
   const hotelId = resolveHotelId(ctx, q.hotelId);
@@ -326,6 +366,14 @@ export async function liveBoard(db: Db, ctx: AuthContext, q: { hotelId?: number;
   const needsReview = open
     .filter((r) => r.status === 'needs_review')
     .map((r) => ({ timeEntryId: r.id, employee: name(r), openSince: r.clock_in_at }));
+  const awaiting = await rows(
+    db,
+    `SELECT te.id, te.employee_id, te.clock_in_at, te.clock_out_at, te.unplanned_reason, e.first_name, e.last_name
+       FROM time_entries te JOIN employees e ON e.id = te.employee_id
+      WHERE te.hotel_id = $1 AND te.approval_status = 'pending' ORDER BY te.clock_in_at`,
+    [hotelId],
+  );
+  const awaitingApproval = awaiting.map((r) => ({ timeEntryId: r.id, employee: name(r), clockInAt: r.clock_in_at, clockOutAt: r.clock_out_at, reason: r.unplanned_reason }));
   const shifts = await rows(
     db,
     `SELECT s.id, s.employee_id, s.date, e.first_name, e.last_name, e.attendance_required, sh.name, sh.start_time, sh.end_time, sh.department_id
@@ -336,6 +384,24 @@ export async function liveBoard(db: Db, ctx: AuthContext, q: { hotelId?: number;
   );
   const expectedNotArrived = [];
   const noShows = [];
+  // two batched lookups instead of two queries per scheduled shift
+  const empIds = [...new Set(shifts.map((x) => x.employee_id))];
+  const entries = empIds.length
+    ? await rows(
+        db,
+        `SELECT employee_id, schedule_id, clock_in_at, clock_out_at FROM time_entries
+          WHERE employee_id = ANY($1::bigint[]) AND clock_in_at > $2 AND clock_in_at < $3`,
+        [empIds, new Date(t.getTime() - 3 * 86_400_000), new Date(t.getTime() + 86_400_000)],
+      )
+    : [];
+  const absences = empIds.length
+    ? await rows(
+        db,
+        `SELECT employee_id, start_date, end_date FROM time_offs
+          WHERE employee_id = ANY($1::bigint[]) AND status = 'approved' AND start_date <= $3 AND end_date >= $2`,
+        [empIds, addDays(today, -1), today],
+      )
+    : [];
   for (const s of shifts) {
     const inst = shiftInstants(s.date, s.start_time, s.end_time, hotel.timezone);
     if (s.date !== today && inst.end <= t) {
@@ -343,14 +409,17 @@ export async function liveBoard(db: Db, ctx: AuthContext, q: { hotelId?: number;
       continue;
     }
     if (inst.start > t) continue;
-    const entry = await maybeOne(
-      db,
-      `SELECT 1 FROM time_entries WHERE employee_id = $1 AND (schedule_id = $2 OR tstzrange(clock_in_at, COALESCE(clock_out_at, 'infinity')) && tstzrange($3::timestamptz, $4::timestamptz)) LIMIT 1`,
-      [s.employee_id, s.id, new Date(inst.start.getTime() - 2 * 3_600_000), inst.end],
-    );
-    if (entry) continue;
-    const absent = await maybeOne(db, `SELECT 1 FROM time_offs WHERE employee_id = $1 AND status = 'approved' AND start_date <= $2 AND end_date >= $2`, [s.employee_id, s.date]);
-    if (absent) continue;
+    const windowStart = inst.start.getTime() - 2 * 3_600_000;
+    const hasEntry = entries.some((e) => {
+      if (e.employee_id !== s.employee_id) return false;
+      if (e.schedule_id === s.id) return true;
+      // any time entry overlapping [start − 2 h, end) counts as having arrived
+      const inAt = new Date(e.clock_in_at).getTime();
+      const outAt = e.clock_out_at ? new Date(e.clock_out_at).getTime() : Infinity;
+      return inAt < inst.end.getTime() && outAt > windowStart;
+    });
+    if (hasEntry) continue;
+    if (absences.some((x) => x.employee_id === s.employee_id && x.start_date <= s.date && x.end_date >= s.date)) continue;
     const minutesLate = Math.floor((t.getTime() - inst.start.getTime()) / 60_000);
     if (t.getTime() > inst.end.getTime() + tol * 60_000) {
       if (s.attendance_required) noShows.push({ scheduleId: s.id, employee: name(s), shift: { name: s.name, startTime: s.start_time, endTime: s.end_time } });
@@ -358,7 +427,7 @@ export async function liveBoard(db: Db, ctx: AuthContext, q: { hotelId?: number;
       expectedNotArrived.push({ scheduleId: s.id, employee: name(s), shift: { name: s.name, startTime: s.start_time }, minutesLate });
     }
   }
-  return { serverTime: t.toISOString(), clockedIn, expectedNotArrived, noShows, needsReview };
+  return { serverTime: t.toISOString(), clockedIn, expectedNotArrived, noShows, needsReview, awaitingApproval };
 }
 
 /** AT9: managers may only move the lock forward; admins may move it back. */
@@ -372,6 +441,50 @@ export async function setLock(db: Db, ctx: AuthContext, hotelId: number, lockedU
   await db.query('UPDATE hotels SET attendance_locked_until = $2 WHERE id = $1', [hotelId, lockedUntil]);
   await audit(db, ctx, { action: 'attendance.lock', entityType: 'hotel', entityId: hotelId, hotelId, before: { lockedUntil: current }, after: { lockedUntil }, meta: reason ? { adminReason: reason } : {} });
   return { hotelId, lockedUntil };
+}
+
+/**
+ * SPEC 1.13: an entry linked to a planned shift that is still open `autoCloseAfterPlannedEndHours` (default 5) after the
+ * planned end is closed with the planned end time and the shift's scheduled break (source_out 'system').
+ * Unplanned entries, entries in a locked period and entries clocked in after the planned end are left to markNeedsReview.
+ */
+export async function autoCloseForgottenClockOuts(db: Db): Promise<number> {
+  const hotels = await rows(db, 'SELECT * FROM hotels WHERE deleted_at IS NULL');
+  let total = 0;
+  const t = now();
+  for (const h of hotels) {
+    const hotel = await loadHotel(db, h.id);
+    const afterH = hotel.settings.attendance.autoCloseAfterPlannedEndHours;
+    if (!afterH) continue;
+    const open = await rows(
+      db,
+      `SELECT te.id, te.employee_id, te.clock_in_at, te.approval_status, te.anomalies, sc.date, sh.start_time, sh.end_time, sh.break_duration_minutes
+         FROM time_entries te JOIN schedules sc ON sc.id = te.schedule_id JOIN shifts sh ON sh.id = sc.shift_id
+        WHERE te.hotel_id = $1 AND te.status IN ('open','needs_review') AND te.clock_out_at IS NULL`,
+      [h.id],
+    );
+    for (const e of open) {
+      const end = shiftInstants(e.date, e.start_time, e.end_time, hotel.timezone).end;
+      if (t.getTime() < end.getTime() + afterH * 3_600_000) continue;
+      const inAt = new Date(e.clock_in_at);
+      if (inAt >= end) continue;
+      if (hotel.attendanceLockedUntil && localDate(end, hotel.timezone) <= hotel.attendanceLockedUntil) continue;
+      const gross = Math.floor((end.getTime() - inAt.getTime()) / 60_000);
+      const brk = Math.max(0, Math.min(e.break_duration_minutes, gross - 1));
+      const anomalies = [...(e.anomalies ?? []), { type: 'auto_closed_planned_hours', plannedEnd: end.toISOString() }];
+      const upd = await rows(
+        db,
+        `UPDATE time_entries SET clock_out_at = $2, break_minutes = $3, status = 'closed', source_out = 'system', anomalies = $4
+          WHERE id = $1 AND status IN ('open','needs_review') AND clock_out_at IS NULL RETURNING id`,
+        [e.id, end, brk, JSON.stringify(anomalies)],
+      );
+      if (upd.length === 0) continue;
+      total++;
+      await notify(db, { userIds: await managerIdsOfHotel(db, h.id), kind: 'needs_review_entry', params: { timeEntryId: e.id, employeeId: e.employee_id, anomaly: 'auto_closed' }, entityType: 'time_entry', entityId: e.id });
+      await audit(db, null, { action: 'attendance.auto_close', entityType: 'time_entry', entityId: e.id, hotelId: h.id, companyId: h.company_id, meta: { clockOutAt: end.toISOString(), breakMinutes: brk } });
+    }
+  }
+  return total;
 }
 
 /** R13.7 job: entries open longer than needsReviewAfterHours become needs_review (never auto-closed). */

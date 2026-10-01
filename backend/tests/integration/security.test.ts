@@ -68,3 +68,35 @@ describe('security review hardening', () => {
     }
   });
 });
+
+describe('browser access (CORS)', () => {
+  beforeEach(async () => {
+    w = await setupWorld();
+  });
+
+  it('answers preflight for an allowed origin and exposes ETag/Location to the browser', async () => {
+    const { default: request } = await import('supertest');
+    const { app } = await import('../helpers/api');
+    const pre = await request(app)
+      .options('/api/v1/schedules/1')
+      .set('Origin', 'http://localhost:5173')
+      .set('Access-Control-Request-Method', 'PATCH')
+      .set('Access-Control-Request-Headers', 'authorization,if-match,content-type');
+    expect(pre.status).toBe(204);
+    expect(pre.headers['access-control-allow-origin']).toBe('http://localhost:5173');
+    expect(pre.headers['access-control-allow-credentials']).toBe('true');
+    expect(pre.headers['access-control-allow-headers']).toMatch(/If-Match/i);
+    expect(pre.headers['access-control-allow-methods']).toMatch(/PATCH/);
+    const s = await as(w.tokens.manager1).post('/schedules', { hotelId: w.h1, entryType: 'shift', employeeId: w.maria, shiftId: w.early, date: '2026-10-05' });
+    const get = await request(app).get(`/api/v1/schedules/${s.body.id}`).set('Origin', 'http://localhost:5173').set('Authorization', `Bearer ${w.tokens.manager1}`);
+    expect(get.headers['access-control-expose-headers']).toMatch(/ETag/);
+    expect(get.headers.etag).toBeTruthy();
+  });
+
+  it('does not grant CORS to unknown origins', async () => {
+    const { default: request } = await import('supertest');
+    const { app } = await import('../helpers/api');
+    const res = await request(app).get('/api/v1/health').set('Origin', 'https://evil.example');
+    expect(res.headers['access-control-allow-origin']).toBeUndefined();
+  });
+});

@@ -87,6 +87,14 @@ DST nights and kiosk timestamps deterministic. Unit tests cover the pure domain 
 | `tests/integration/phase10.retention.test.ts` | 64–65 |
 | `tests/unit/*.test.ts` | hours, instants/rest period (DST), weeks, counted days, vacation, minors, anomalies, Bradford, time account |
 
+## 7. Audit pass (after the first release)
+Method: coverage measurement (statements 83.7% → 91.3%, branches 69.7% → 80.5%), RBAC matrix derived from the SPEC
+endpoint table (all 121 endpoints × anonymous/staff/manager/admin), randomized cross-checks of independent
+implementations (JS vs database trigger, JS vs SQL time arithmetic, per-minute supplements vs a naive reference),
+concurrency races, a load test and a simulated production image. Defects found and fixed are listed in
+SPEC 1.11 and `docs/SECURITY_REVIEW.md` (second pass). Follow-up feature: unplanned clock-in needs a reason and a
+supervisor's approval before the hours count (SPEC 1.12, migration `0004`); forgotten clock-out on a planned shift is auto-credited with the planned hours after 5 h (SPEC 1.13, migration `0005`).
+
 ## 6. Result (this build)
 
 | Check | Result |

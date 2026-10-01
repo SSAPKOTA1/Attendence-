@@ -18,20 +18,24 @@ export interface MonthAccount {
   openEntries: number;
 }
 
-/** Worked minutes of closed entries at all hotels by local clock-in month (or one hotel when hotelId is given). */
+/**
+ * Worked minutes of closed entries at all hotels by local clock-in month (or one hotel when hotelId is given).
+ * Unplanned work counts only after a supervisor approved it (SPEC 1.12); `awaiting` counts entries still to be decided.
+ */
 export async function workedByMonth(db: Db, employeeId: number, from: string, to: string, hotelId?: number) {
   const list = await rows(
     db,
     `SELECT to_char((te.clock_in_at AT TIME ZONE h.timezone)::date, 'YYYY-MM') AS month,
-            COALESCE(SUM(GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (te.clock_out_at - te.clock_in_at)) / 60) - te.break_minutes)) FILTER (WHERE te.status = 'closed'), 0)::int AS worked,
-            COUNT(*) FILTER (WHERE te.status <> 'closed')::int AS open
+            COALESCE(SUM(GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (te.clock_out_at - te.clock_in_at)) / 60) - te.break_minutes)) FILTER (WHERE te.status = 'closed' AND te.approval_status IN ('not_required','approved')), 0)::int AS worked,
+            COUNT(*) FILTER (WHERE te.status <> 'closed')::int AS open,
+            COUNT(*) FILTER (WHERE te.approval_status = 'pending')::int AS awaiting
        FROM time_entries te JOIN hotels h ON h.id = te.hotel_id
       WHERE te.employee_id = $1 AND (te.clock_in_at AT TIME ZONE h.timezone)::date BETWEEN $2 AND $3
         AND ($4::bigint IS NULL OR te.hotel_id = $4)
       GROUP BY 1`,
     [employeeId, from, to, hotelId ?? null],
   );
-  return new Map(list.map((r) => [r.month, { worked: r.worked, open: r.open }]));
+  return new Map(list.map((r) => [r.month, { worked: r.worked, open: r.open, awaiting: r.awaiting }]));
 }
 
 export async function computeMonths(db: Db, employeeId: number, fromMonth: string, toMonth: string): Promise<MonthAccount[]> {

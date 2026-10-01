@@ -30,7 +30,7 @@ async function pinFor(employeeId: number, tok = w.tokens.manager1) {
 async function punch(dev: string, employeeId: number, pin: string, action: string, extra: Record<string, unknown> = {}) {
   const v = await device(dev).post('/kiosk/verify', { employeeId, pin });
   expect(v.status).toBe(200);
-  return device(dev).post('/kiosk/punch', { punchToken: v.body.punchToken, action, ...extra });
+  return device(dev).post('/kiosk/punch', { punchToken: v.body.punchToken, reason: 'Covering for a colleague (test)', action, ...extra });
 }
 
 async function publishShift(employeeId: number, shiftId: number, date: string, hotelId?: number, tok?: string) {
@@ -112,13 +112,13 @@ describe('Phase 6: kiosk and attendance', () => {
     const dev = await pair(w.h1, w.tokens.manager1);
     const pin = await pinFor(w.maria);
     const v = await device(dev).post('/kiosk/verify', { employeeId: w.maria, pin });
-    expect((await device(dev).post('/kiosk/punch', { punchToken: v.body.punchToken, action: 'clock_in' })).status).toBe(201);
-    const reuse = await device(dev).post('/kiosk/punch', { punchToken: v.body.punchToken, action: 'clock_out' });
+    expect((await device(dev).post('/kiosk/punch', { punchToken: v.body.punchToken, reason: 'Covering for a colleague (test)', action: 'clock_in' })).status).toBe(201);
+    const reuse = await device(dev).post('/kiosk/punch', { punchToken: v.body.punchToken, reason: 'Covering for a colleague (test)', action: 'clock_out' });
     expect(reuse.status).toBe(401);
     expect(reuse.body.error.code).toBe('PUNCH_TOKEN_INVALID');
     const v2 = await device(dev).post('/kiosk/verify', { employeeId: w.maria, pin });
     advance(61_000);
-    const expired = await device(dev).post('/kiosk/punch', { punchToken: v2.body.punchToken, action: 'clock_out' });
+    const expired = await device(dev).post('/kiosk/punch', { punchToken: v2.body.punchToken, reason: 'Covering for a colleague (test)', action: 'clock_out' });
     expect(expired.status).toBe(401);
     expect(expired.body.error.code).toBe('PUNCH_TOKEN_INVALID');
   });
@@ -130,7 +130,7 @@ describe('Phase 6: kiosk and attendance', () => {
     const v = await device(dev).post('/kiosk/verify', { employeeId: w.maria, pin });
     expect(v.body.allowedActions).toEqual(['clock_out']);
     expect(v.body.status).toBe('in');
-    const res = await device(dev).post('/kiosk/punch', { punchToken: v.body.punchToken, action: 'clock_in' });
+    const res = await device(dev).post('/kiosk/punch', { punchToken: v.body.punchToken, reason: 'Covering for a colleague (test)', action: 'clock_in' });
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('INVALID_PUNCH_STATE');
   });
@@ -192,7 +192,7 @@ describe('Phase 6: kiosk and attendance', () => {
     expect(row).toEqual({ status: 'needs_review', clock_out_at: null });
     const v = await device(dev).post('/kiosk/verify', { employeeId: w.maria, pin });
     expect(v.body.allowedActions).toEqual([]);
-    const res = await device(dev).post('/kiosk/punch', { punchToken: v.body.punchToken, action: 'clock_in' });
+    const res = await device(dev).post('/kiosk/punch', { punchToken: v.body.punchToken, reason: 'Covering for a colleague (test)', action: 'clock_in' });
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('ENTRY_NEEDS_REVIEW');
     const live = await M1().get('/attendance/live');
@@ -317,7 +317,7 @@ describe('Phase 6: kiosk and attendance', () => {
     const pin = await pinFor(w.flo);
     expect((await punch(dev1, w.flo, pin, 'clock_in')).status).toBe(201);
     const v = await device(dev2).post('/kiosk/verify', { employeeId: w.flo, pin });
-    const blocked = await device(dev2).post('/kiosk/punch', { punchToken: v.body.punchToken, action: 'clock_in' });
+    const blocked = await device(dev2).post('/kiosk/punch', { punchToken: v.body.punchToken, reason: 'Covering for a colleague (test)', action: 'clock_in' });
     expect(blocked.status).toBe(409);
     expect(blocked.body.error.code).toBe('INVALID_PUNCH_STATE');
     advance(3_600_000);
@@ -372,13 +372,13 @@ describe('Phase 6: kiosk and attendance', () => {
         absenceDaysAnnual: 2, absenceDaysSick: 1, absenceDaysUnpaid: 0,
         // break deducted proportionally: night 420 × 420/480 = 367.5 → 368; the other supplements 480 − 30 = 450
         nightMinutes: 368, saturdayMinutes: 450, sundayMinutes: 450, holidayMinutes: 450,
-        openOrReviewEntries: 1, timeAccountDeltaMinutes: -5430,
+        openOrReviewEntries: 1, unapprovedEntries: 0, timeAccountDeltaMinutes: -5430,
       },
     ]);
     const csv = await M1().get(`/hotels/${w.h1}/payroll-export?month=2026-05&format=csv`);
     expect(csv.status).toBe(200);
     expect(csv.headers['content-type']).toMatch(/text\/csv/);
-    expect(csv.text.split('\r\n')[0]).toBe('employeeNumber,lastName,firstName,employmentType,payType,workedMinutes,plannedMinutes,creditedAnnualMinutes,creditedSickMinutes,creditedSchoolMinutes,creditedPublicHolidayMinutes,absenceDaysAnnual,absenceDaysSick,absenceDaysUnpaid,nightMinutes,saturdayMinutes,sundayMinutes,holidayMinutes,openOrReviewEntries,timeAccountDeltaMinutes');
+    expect(csv.text.split('\r\n')[0]).toBe('employeeNumber,lastName,firstName,employmentType,payType,workedMinutes,plannedMinutes,creditedAnnualMinutes,creditedSickMinutes,creditedSchoolMinutes,creditedPublicHolidayMinutes,absenceDaysAnnual,absenceDaysSick,absenceDaysUnpaid,nightMinutes,saturdayMinutes,sundayMinutes,holidayMinutes,openOrReviewEntries,unapprovedEntries,timeAccountDeltaMinutes');
     const att = await M1().get(`/attendance/export?hotelId=${w.h1}&from=2026-05-01&to=2026-05-31&format=csv`);
     expect(att.status).toBe(200);
     expect(att.text.trim().split('\r\n')).toHaveLength(6);
@@ -449,7 +449,7 @@ describe('Phase 6: kiosk and attendance', () => {
     const v = await device(dev).post('/kiosk/verify', { employeeId: w.maria, pin: '482913' });
     expect(v.body.status).toBe('on_break');
     expect(v.body.allowedActions).toEqual(['break_end', 'clock_out']);
-    expect((await device(dev).post('/kiosk/punch', { punchToken: v.body.punchToken, action: 'break_end' })).status).toBe(201);
+    expect((await device(dev).post('/kiosk/punch', { punchToken: v.body.punchToken, reason: 'Covering for a colleague (test)', action: 'break_end' })).status).toBe(201);
     setNow('2026-10-01T12:00:00Z');
     const out = await punch(dev, w.maria, '482913', 'clock_out');
     expect(out.body.anomalies.map((a: any) => a.type)).toContain('missing_break');

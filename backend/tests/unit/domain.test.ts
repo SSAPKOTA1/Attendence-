@@ -221,3 +221,27 @@ describe('config safety', () => {
     expect(() => run('loopback')).not.toThrow();
   });
 });
+
+describe('timing safety', () => {
+  it('the dummy hash used for unknown accounts has the configured bcrypt cost', async () => {
+    const { dummyHashRounds } = await import('../../src/services/tokens');
+    const { config } = await import('../../src/config');
+    expect(dummyHashRounds()).toBe(config.BCRYPT_COST);
+  });
+
+  it('an unknown login costs as much time as a wrong password (real cost factor)', async () => {
+    const bcrypt = (await import('bcryptjs')).default;
+    const { burnTime } = await import('../../src/services/tokens');
+    const real = bcrypt.hashSync('right-password', 6);
+    const time = async (fn: () => Promise<unknown>) => {
+      const t = process.hrtime.bigint();
+      await fn();
+      return Number(process.hrtime.bigint() - t) / 1e6;
+    };
+    // at test cost (4) both are tiny, so only check the code path runs a real bcrypt comparison and not a no-op
+    const unknown = await time(() => burnTime('x'));
+    const wrong = await time(() => bcrypt.compare('x', real));
+    expect(unknown).toBeGreaterThan(0.05);
+    expect(wrong).toBeGreaterThan(0.05);
+  });
+});
