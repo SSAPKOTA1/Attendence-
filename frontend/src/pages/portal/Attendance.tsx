@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { get, patch, post } from '../../lib/api';
+import { get, getAll, patch, post } from '../../lib/api';
 import { useI18n } from '../../lib/i18n';
 import { addDays, fmtDate, fmtMinutes, fmtTime, todayLocal } from '../../lib/format';
 import { Dialog, ErrorBox, Field, Loading, Tag } from '../../components/ui';
@@ -20,7 +20,7 @@ export default function Attendance() {
   const { t, lang } = useI18n();
   const qc = useQueryClient();
   const from = addDays(todayLocal(), -30);
-  const q = useQuery({ queryKey: ['me', 'attendance', from], queryFn: () => get('/attendance', { from, to: todayLocal(), limit: 100 }).then((r) => r.data) });
+  const q = useQuery({ queryKey: ['me', 'attendance', from], queryFn: () => getAll<any>('/attendance', { from, to: todayLocal() }) });
   const corrections = useQuery({ queryKey: ['me', 'corrections'], queryFn: () => get('/attendance/corrections').then((r) => r.data) });
   const [target, setTarget] = useState<any>(null);
   const [out, setOut] = useState('');
@@ -37,8 +37,8 @@ export default function Attendance() {
     <div className="page">
       <header className="page-head"><div><div className="kicker">{t('Letzte 30 Tage')}</div><h1>{t('Meine Zeiten')}</h1></div></header>
       {q.isLoading ? <Loading /> : q.error ? <ErrorBox error={q.error} /> : (q.data ?? []).length === 0 ? <p className="muted">{t('Keine Einträge.')}</p> : (
-        <table className="table">
-          <thead><tr><th>{t('Datum')}</th><th>{t('Von – bis')}</th><th>{t('Pause')}</th><th>{t('Gearbeitet')}</th><th>{t('Status')}</th><th /></tr></thead>
+        <div className="table-scroll"><table className="table">
+          <thead><tr><th>{t('Datum')}</th><th>{t('Von – bis')}</th><th>{t('Pause')}</th><th>{t('Gearbeitet')}</th><th>{t('Status')}</th><th><span className="sr-only">{t('Aktionen')}</span></th></tr></thead>
           <tbody>
             {(q.data ?? []).map((e: any) => (
               <tr key={e.id}>
@@ -55,17 +55,17 @@ export default function Attendance() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       )}
       {(corrections.data ?? []).length > 0 && (
         <section className="section">
           <div className="section-head"><h2>{t('Meine Korrekturen')}</h2></div>
-          <table className="table"><tbody>
+          <div className="table-scroll"><table className="table"><tbody>
             {corrections.data.map((c: any) => (
               <tr key={c.id}><td>{c.reason}</td><td><Tag kind={c.status === 'pending' ? 'outline' : 'neutral'}>{t(STATUS[c.status] ?? c.status)}</Tag></td>
                 <td>{c.status === 'pending' && <button className="btn btn-ghost" onClick={() => withdraw.mutate(c.id)}>{t('Zurückziehen')}</button>}</td></tr>
             ))}
-          </tbody></table>
+          </tbody></table></div>
         </section>
       )}
       {target && (

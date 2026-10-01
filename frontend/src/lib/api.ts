@@ -17,13 +17,18 @@ export const getAccessToken = () => accessToken;
 export const setSessionLostHandler = (fn: () => void) => { onSessionLost = fn; };
 
 const DEVICE_KEY = 'kiosk.deviceToken';
+const HOTEL_KEY = 'kiosk.hotel';
+export const kioskHotel = {
+  get: (): { name: string; timezone: string } => { try { return JSON.parse(localStorage.getItem(HOTEL_KEY) ?? 'null') ?? { name: '', timezone: 'Europe/Berlin' }; } catch { return { name: '', timezone: 'Europe/Berlin' }; } },
+  set: (h: { name: string; timezone: string }) => { try { localStorage.setItem(HOTEL_KEY, JSON.stringify(h)); } catch { /* private mode */ } },
+};
 export const deviceToken = {
   get: () => { try { return localStorage.getItem(DEVICE_KEY); } catch { return null; } },
   set: (t: string) => { try { localStorage.setItem(DEVICE_KEY, t); } catch { /* private mode */ } },
   clear: () => { try { localStorage.removeItem(DEVICE_KEY); } catch { /* private mode */ } },
 };
 
-type Opts = { body?: unknown; query?: Record<string, unknown>; device?: boolean; noAuth?: boolean; raw?: boolean; headers?: Record<string, string>; retry?: boolean };
+type Opts = { blob?: boolean; body?: unknown; query?: Record<string, unknown>; device?: boolean; noAuth?: boolean; raw?: boolean; headers?: Record<string, string>; retry?: boolean };
 
 function qs(query?: Record<string, unknown>) {
   if (!query) return '';
@@ -41,9 +46,12 @@ async function toError(res: Response): Promise<ApiError> {
   return new ApiError(res.status, code ?? 'HTTP_' + res.status, message ?? res.statusText, details, extra);
 }
 
+/** Refresh tokens are single-use (reuse revokes the session), so tabs of the same browser must take turns. */
+const exclusively = <T>(fn: () => Promise<T>): Promise<T> => (typeof navigator !== 'undefined' && navigator.locks ? (navigator.locks.request('refresh-session', fn) as Promise<T>) : fn());
+
 /** Rotate the refresh cookie; resolves with the new access token or null (session over). */
 export function refreshSession(): Promise<string | null> {
-  refreshing ??= (async () => {
+  refreshing ??= exclusively(async () => {
     try {
       const res = await fetch(`${BASE}/auth/refresh`, {
         method: 'POST', credentials: 'include',
@@ -58,7 +66,7 @@ export function refreshSession(): Promise<string | null> {
     } finally {
       refreshing = null;
     }
-  })();
+  });
   return refreshing;
 }
 
@@ -81,6 +89,7 @@ export async function api<T = any>(method: string, path: string, opts: Opts = {}
   }
   if (!res.ok) throw await toError(res);
   if (res.status === 204) return undefined as T;
+  if (opts.blob) return (await res.blob()) as T;
   if (opts.raw) return (await res.text()) as T;
   return (await res.json()) as T;
 }
@@ -91,11 +100,10 @@ export const patch = <T = any>(path: string, body?: unknown, o: Opts = {}) => ap
 export const put = <T = any>(path: string, body?: unknown, o: Opts = {}) => api<T>('PUT', path, { ...o, body: body ?? {} });
 export const del = <T = any>(path: string, o: Opts = {}) => api<T>('DELETE', path, o);
 
-/** Download a file endpoint with the bearer token (exports). */
+/** Download a file endpoint (exports); goes through api() so an expired access token is refreshed first. */
 export async function download(path: string, query: Record<string, unknown>, filename: string) {
-  const res = await fetch(`${BASE}${path}${qs(query)}`, { headers: { Authorization: `Bearer ${accessToken}`, 'X-Client': 'web' }, credentials: 'include' });
-  if (!res.ok) throw await toError(res);
-  const url = URL.createObjectURL(await res.blob());
+  const blob = await api<Blob>('GET', path, { query, blob: true });
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
@@ -105,9 +113,10 @@ export async function download(path: string, query: Record<string, unknown>, fil
 export async function getAll<T = any>(path: string, query: Record<string, unknown> = {}): Promise<T[]> {
   const out: T[] = [];
   for (let page = 1; page < 50; page++) {
-    const r = await get<{ data: T[]; meta: { total: number } }>(path, { ...query, page, limit: 100 });
+    const r = await get<{ data: T[]; meta?: { total: number } }>(path, { ...query, page, limit: 100 });
     out.push(...r.data);
-    if (out.length >= r.meta.total || r.data.length === 0) break;
+    // some lists (attendance, wishes) are not paginated and come back whole without meta
+    if (!r.meta || out.length >= r.meta.total || r.data.length === 0) break;
   }
   return out;
 }

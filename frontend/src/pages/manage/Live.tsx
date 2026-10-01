@@ -27,34 +27,34 @@ export default function Live() {
       </header>
       <Section title={`${t('Eingestempelt')} (${d.clockedIn.length})`}>
         {d.clockedIn.length === 0 ? <Empty>{t('Gerade niemand eingestempelt.')}</Empty> : (
-          <table className="table"><tbody>
+          <div className="table-scroll"><table className="table"><tbody>
             {d.clockedIn.map((c: any, i: number) => (
               <tr key={i}><td><strong>{c.employee.displayName}</strong></td><td>{c.shift?.name ?? t('ungeplant')}</td><td>{t('seit {t}', { t: fmtTime(c.since, tz, lang) })}</td>
                 <td>{c.onBreak && <Tag kind="outline">{t('Pause')}</Tag>}{c.anomalies?.map((a: any, j: number) => <Tag key={j} kind="outline">{t(ANOMALY[a.type] ?? a.type)}</Tag>)}</td></tr>
             ))}
-          </tbody></table>
+          </tbody></table></div>
         )}
       </Section>
       <Section title={`${t('Erwartet, nicht da')} (${d.expectedNotArrived.length})`}>
         {d.expectedNotArrived.length === 0 ? <Empty>{t('Alle Erwarteten sind da.')}</Empty> : (
-          <table className="table"><tbody>
+          <div className="table-scroll"><table className="table"><tbody>
             {d.expectedNotArrived.map((c: any, i: number) => <tr key={i}><td><strong>{c.employee.displayName}</strong></td><td>{c.shift.name} {c.shift.startTime}</td><td><Tag kind="accent">{t('{n} Min. zu spät', { n: c.minutesLate })}</Tag></td></tr>)}
-          </tbody></table>
+          </tbody></table></div>
         )}
       </Section>
       {d.noShows.length > 0 && (
         <Section title={`${t('Nicht erschienen')} (${d.noShows.length})`}>
-          <table className="table"><tbody>{d.noShows.map((c: any, i: number) => <tr key={i}><td><strong>{c.employee.displayName}</strong></td><td>{c.shift.name} {c.shift.startTime}–{c.shift.endTime}</td></tr>)}</tbody></table>
+          <div className="table-scroll"><table className="table"><tbody>{d.noShows.map((c: any, i: number) => <tr key={i}><td><strong>{c.employee.displayName}</strong></td><td>{c.shift.name} {c.shift.startTime}–{c.shift.endTime}</td></tr>)}</tbody></table></div>
         </Section>
       )}
       <Section title={`${t('Zu prüfen')} (${d.needsReview.length})`}>
         {d.needsReview.length === 0 ? <Empty>{t('Keine offenen Prüfungen.')}</Empty> : (
-          <table className="table"><tbody>
+          <div className="table-scroll"><table className="table"><tbody>
             {d.needsReview.map((c: any) => (
               <tr key={c.timeEntryId}><td><strong>{c.employee.displayName}</strong></td><td className="muted">{t('Eingestempelt {t}, nie ausgestempelt', { t: new Intl.DateTimeFormat(lang, { weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: tz }).format(new Date(c.openSince)) })}</td>
                 <td><button className="btn btn-primary" onClick={() => setFix(c)}>{t('Mit Korrektur schließen')}</button></td></tr>
             ))}
-          </tbody></table>
+          </tbody></table></div>
         )}
       </Section>
       {d.awaitingApproval?.length > 0 && (

@@ -164,8 +164,8 @@ function TimeAccountSection({ id, lang }: { id: string; lang: string }) {
       {!a.timeAccountEnabled ? <p className="muted">{t('Stundenlohn: kein Arbeitszeitkonto.')}</p> : (
         <>
           <Stat label={t('Saldo')} value={fmtHours(a.balanceHours, lang)} />
-          <table className="table"><thead><tr><th>{t('Monat')}</th><th>{t('Gearbeitet')}</th><th>{t('Gutschrift')}</th><th>{t('Soll')}</th><th>{t('Differenz')}</th></tr></thead>
-            <tbody>{a.months.map((m: any) => <tr key={m.month}><td>{m.month}</td><td>{fmtHours(m.workedHours, lang)}</td><td>{fmtHours(m.creditedHours, lang)}</td><td>{fmtHours(m.targetHours, lang)}</td><td>{fmtHours(m.deltaHours, lang)}{m.openEntries ? <> <Tag kind="accent">{t('{n} offen', { n: m.openEntries })}</Tag></> : null}</td></tr>)}</tbody></table>
+          <div className="table-scroll"><table className="table"><thead><tr><th>{t('Monat')}</th><th>{t('Gearbeitet')}</th><th>{t('Gutschrift')}</th><th>{t('Soll')}</th><th>{t('Differenz')}</th></tr></thead>
+            <tbody>{a.months.map((m: any) => <tr key={m.month}><td>{m.month}</td><td>{fmtHours(m.workedHours, lang)}</td><td>{fmtHours(m.creditedHours, lang)}</td><td>{fmtHours(m.targetHours, lang)}</td><td>{fmtHours(m.deltaHours, lang)}{m.openEntries ? <> <Tag kind="accent">{t('{n} offen', { n: m.openEntries })}</Tag></> : null}</td></tr>)}</tbody></table></div>
         </>
       )}
     </Section>

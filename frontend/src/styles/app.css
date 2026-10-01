@@ -174,3 +174,17 @@ textarea.input { resize: vertical; font: inherit; }
   body { background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 .swatch { display: inline-block; width: 12px; height: 12px; margin-right: 6px; vertical-align: -1px; border: 1px solid var(--color-divider); }
+
+/* Accessibility overrides (WCAG AA): the design system's pure accent (#ec3013) only reaches 3.75:1 as small text. Keep the look,
+   use the darker accent steps wherever the accent carries small text or sits behind it. */
+.btn-primary { background: var(--color-accent-600); color: #fff; border-color: var(--color-accent-600); }
+.btn-primary:hover { background: var(--color-accent-700); border-color: var(--color-accent-700); }
+.btn-ghost { color: var(--color-accent-700); }
+.tag-outline { color: var(--color-accent-700); }
+.table th { color: var(--color-neutral-800); }
+.badge { background: var(--color-accent-700); }
+.grid th.is-today { background: var(--color-accent-700); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.table-scroll { position: relative; max-width: 100%; overflow-x: auto; } /* relative: keeps .sr-only cells inside the scroller */
+.seg { flex-wrap: wrap; max-width: 100%; }
+.page > *, .section { min-width: 0; }

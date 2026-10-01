@@ -53,8 +53,8 @@ function Shifts({ hotelId }: { hotelId: number }) {
       <div className="section-head"><h2>{t('Dienste')}</h2>{admin && <button className="btn btn-primary" onClick={() => setEdit({ name: '', startTime: '06:00', endTime: '14:00', breakDurationMinutes: 30, departmentId: depts.data?.[0]?.id })}>{t('Neuer Dienst')}</button>}</div>
       {!admin && <p className="muted small">{t('Dienste werden von der Administration angelegt. Du kannst den Mindestbedarf festlegen.')}</p>}
       {shifts.isLoading ? <Loading /> : (shifts.data ?? []).length === 0 ? <Empty>{t('Noch keine Dienste.')}</Empty> : (
-        <table className="table">
-          <thead><tr><th>{t('Name')}</th><th>{t('Abteilung')}</th><th>{t('Zeit')}</th><th>{t('Pause')}</th><th>{t('Bezahlt')}</th><th /></tr></thead>
+        <div className="table-scroll"><table className="table">
+          <thead><tr><th>{t('Name')}</th><th>{t('Abteilung')}</th><th>{t('Zeit')}</th><th>{t('Pause')}</th><th>{t('Bezahlt')}</th><th><span className="sr-only">{t('Aktionen')}</span></th></tr></thead>
           <tbody>
             {shifts.data!.map((s) => (
               <tr key={s.id}>
@@ -66,7 +66,7 @@ function Shifts({ hotelId }: { hotelId: number }) {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       )}
       <ErrorBox error={remove.error} />
       {edit && <ShiftDialog hotelId={hotelId} shift={edit} depts={depts.data ?? []} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); refresh(); }} />}
@@ -143,9 +143,9 @@ function Departments({ hotelId }: { hotelId: number }) {
       </form>
       <ErrorBox error={create.error ?? remove.error} />
       {q.isLoading ? <Loading /> : (
-        <table className="table"><tbody>
+        <div className="table-scroll"><table className="table"><tbody>
           {(q.data ?? []).map((d) => <tr key={d.id}><td><span className="swatch" style={{ background: d.color }} /> <strong>{d.name}</strong></td><td><button className="btn btn-ghost" onClick={() => remove.mutate(d.id)}>{t('Löschen')}</button></td></tr>)}
-        </tbody></table>
+        </tbody></table></div>
       )}
     </section>
   );
@@ -172,8 +172,8 @@ function Users({ hotelId }: { hotelId: number }) {
       <div className="section-head"><h2>{t('Benutzer')}</h2><button className="btn btn-primary" onClick={() => setCreating(true)}>{t('Benutzer anlegen')}</button></div>
       <ErrorBox error={invite.error ?? reset.error ?? toggle.error ?? remove.error} />
       {q.isLoading ? <Loading /> : (
-        <table className="table">
-          <thead><tr><th>{t('Name')}</th><th>{t('Anmeldung')}</th><th>{t('Rolle')}</th><th>{t('Status')}</th><th /></tr></thead>
+        <div className="table-scroll"><table className="table">
+          <thead><tr><th>{t('Name')}</th><th>{t('Anmeldung')}</th><th>{t('Rolle')}</th><th>{t('Status')}</th><th><span className="sr-only">{t('Aktionen')}</span></th></tr></thead>
           <tbody>
             {(q.data ?? []).map((u) => (
               <tr key={u.id}>
@@ -189,7 +189,7 @@ function Users({ hotelId }: { hotelId: number }) {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       )}
       {creating && <CreateUser employees={emps ?? []} hotelId={hotelId} admin={me?.role === 'admin'} onClose={() => setCreating(false)} onCreated={(u, url) => { setCreating(false); refresh(); if (url) setLink({ title: t('Einladungslink'), url: url.inviteUrl, expiresAt: url.expiresAt }); void u; }} />}
       {accessFor && <HotelAccess user={accessFor} hotels={hotels} onClose={() => setAccessFor(null)} onSaved={() => { setAccessFor(null); refresh(); }} />}
@@ -269,9 +269,9 @@ function Blackouts({ hotelId }: { hotelId: number }) {
       </form>
       <ErrorBox error={create.error ?? remove.error} />
       {q.isLoading ? <Loading /> : (q.data ?? []).length === 0 ? <Empty>{t('Keine Sperren.')}</Empty> : (
-        <table className="table"><tbody>
+        <div className="table-scroll"><table className="table"><tbody>
           {q.data!.map((b) => <tr key={b.id}><td>{b.startDate} – {b.endDate}</td><td>{b.reason}</td><td><Tag kind={b.mode === 'block' ? 'accent' : 'outline'}>{b.mode === 'block' ? t('Sperren') : t('Warnen')}</Tag></td><td><button className="btn btn-ghost" onClick={() => remove.mutate(b.id)}>{t('Löschen')}</button></td></tr>)}
-        </tbody></table>
+        </tbody></table></div>
       )}
       <span hidden>{lang}</span>
     </section>
@@ -291,10 +291,10 @@ function Audit({ hotelId }: { hotelId: number }) {
         <Field label={t('Aktion (genau, z. B. shift.create)')}>{(i) => <input id={i} className="input" value={action} onChange={(e) => { setAction(e.target.value); setPage(1); }} />}</Field>
       </div>
       {q.isLoading ? <Loading /> : q.error ? <ErrorBox error={q.error} /> : (
-        <table className="table">
+        <div className="table-scroll"><table className="table">
           <thead><tr><th>{t('Zeit')}</th><th>{t('Aktion')}</th><th>{t('Objekt')}</th><th>{t('Benutzer')}</th></tr></thead>
           <tbody>{q.data.data.map((a: any) => <tr key={a.id}><td className="small">{new Intl.DateTimeFormat(lang, { dateStyle: 'short', timeStyle: 'medium' }).format(new Date(a.createdAt))}</td><td>{a.action}</td><td className="muted">{a.entityType} #{a.entityId}</td><td className="muted">#{a.userId ?? '–'}</td></tr>)}</tbody>
-        </table>
+        </table></div>
       )}
       <div className="row gap">
         <button className="btn btn-secondary" disabled={page <= 1} onClick={() => setPage(page - 1)}>‹</button>

@@ -7,7 +7,8 @@ const DB = process.env.E2E_DATABASE_URL ?? 'postgres://postgres:postgres@localho
 export const backendEnv = {
   NODE_ENV: 'development', PORT: String(API_PORT), DATABASE_URL: DB, JWT_SECRET: 'e2e-secret-e2e-secret-e2e-secret-e2e-secret',
   APP_URL: `http://localhost:${WEB_PORT}`, CORS_ORIGINS: `http://localhost:${WEB_PORT}`, MAIL_MODE: 'console', BCRYPT_COST: '4', LOG_LEVEL: 'warn',
-  JOBS_ENABLED: 'false', COOKIE_SECURE: 'false', RATE_LIMIT_USER_PER_MIN: '100000', LOGIN_RATE_LIMIT: '1000', KIOSK_RATE_LIMIT: '100000', TRUST_PROXY: 'loopback',
+  ACCESS_TOKEN_TTL_SECONDS: '8', JOBS_ENABLED: 'false', // short-lived access tokens: every longer test also exercises the silent refresh
+   COOKIE_SECURE: 'false', RATE_LIMIT_USER_PER_MIN: '100000', LOGIN_RATE_LIMIT: '1000', KIOSK_RATE_LIMIT: '100000', TRUST_PROXY: 'loopback',
 };
 
 export default defineConfig({

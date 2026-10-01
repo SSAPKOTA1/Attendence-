@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { ApiError, deviceToken, get, post } from '../../lib/api';
+import { ApiError, deviceToken, get, kioskHotel, post } from '../../lib/api';
 import { useI18n } from '../../lib/i18n';
 import { fmtTime } from '../../lib/format';
 import { ErrorBox } from '../../components/ui';
@@ -25,7 +25,7 @@ function Pairing({ onPaired }: { onPaired: () => void }) {
   const [err, setErr] = useState<unknown>(null);
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); setErr(null);
-    try { const r = await post('/kiosk/pair', { pairingCode: code.trim().toUpperCase() }, { noAuth: true }); deviceToken.set(r.deviceToken); onPaired(); } catch (x) { setErr(x); }
+    try { const r = await post('/kiosk/pair', { pairingCode: code.trim().toUpperCase() }, { noAuth: true }); deviceToken.set(r.deviceToken); kioskHotel.set({ name: r.hotel?.name ?? '', timezone: r.hotel?.timezone ?? 'Europe/Berlin' }); onPaired(); } catch (x) { setErr(x); }
   };
   return (
     <div className="kiosk-card kiosk-center">
@@ -50,6 +50,7 @@ function useServerClock(serverTime?: string) {
 
 function Station({ onLost }: { onLost: () => void }) {
   const { t, lang } = useI18n();
+  const hotel = kioskHotel.get();
   const [step, setStep] = useState<Step>({ kind: 'list' });
   const [search, setSearch] = useState('');
   const roster = useQuery({
@@ -64,8 +65,8 @@ function Station({ onLost }: { onLost: () => void }) {
   return (
     <div className="kiosk-card">
       <div className="kiosk-head">
-        <div className="kiosk-hotel">{t('Stempeluhr')}</div>
-        <div className="kiosk-clock" aria-label={t('Serverzeit')}>{new Intl.DateTimeFormat(lang, { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Europe/Berlin' }).format(clock)}</div>
+        <div className="kiosk-hotel">{hotel.name || t('Stempeluhr')}</div>
+        <div className="kiosk-clock" aria-label={t('Serverzeit')}>{new Intl.DateTimeFormat(lang, { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: hotel.timezone }).format(clock)}</div>
       </div>
       {step.kind === 'list' && (
         <div className="kiosk-body">
@@ -107,8 +108,9 @@ function PinStep({ emp, onBack, onVerified, onLost }: { emp: any; onBack: () => 
       const e = x as ApiError;
       if (e.code === 'DEVICE_UNAUTHORIZED') return onLost();
       setPin('');
-      if (e.code === 'INVALID_PIN') setMsg(t('PIN falsch. Noch {n} Versuche.', { n: e.extra?.attemptsLeft ?? '?' }));
-      else if (e.code === 'PIN_LOCKED') setMsg(t('PIN gesperrt bis {time}. Bitte die Leitung fragen.', { time: e.extra?.lockedUntil ? fmtTime(e.extra.lockedUntil, 'Europe/Berlin') : '…' }));
+      if (e.code === 'INVALID_PIN' && e.extra?.attemptsLeft === 0) setMsg(t('PIN gesperrt. Bitte die Leitung fragen.')); // the failed attempt that used up the last try
+      else if (e.code === 'INVALID_PIN') setMsg(t('PIN falsch. Noch {n} Versuche.', { n: e.extra?.attemptsLeft ?? '?' }));
+      else if (e.code === 'PIN_LOCKED') setMsg(t('PIN gesperrt bis {time}. Bitte die Leitung fragen.', { time: e.extra?.lockedUntil ? fmtTime(e.extra.lockedUntil, kioskHotel.get().timezone) : '…' }));
       else setMsg(e.message);
     } finally { setBusy(false); }
   }, [emp.id, onVerified, onLost, t]);
@@ -171,7 +173,7 @@ function Done({ res, action, onClose, lang }: { res: any; action: string; onClos
   const [left, setLeft] = useState(6);
   useEffect(() => { const i = setInterval(() => setLeft((l) => l - 1), 1000); return () => clearInterval(i); }, []);
   useEffect(() => { if (left <= 0) onClose(); }, [left, onClose]);
-  const time = new Intl.DateTimeFormat(lang, { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' }).format(new Date(res.at));
+  const time = new Intl.DateTimeFormat(lang, { hour: '2-digit', minute: '2-digit', timeZone: kioskHotel.get().timezone }).format(new Date(res.at));
   return (
     <div className="kiosk-body kiosk-center kiosk-done" role="status">
       <h1>{action === 'clock_in' ? t('Eingestempelt {time}', { time }) : action === 'clock_out' ? t('Ausgestempelt {time}', { time }) : t('{a} {time}', { a: t(ACTION[action] ?? action), time })}</h1>

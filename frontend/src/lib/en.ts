@@ -167,4 +167,7 @@ export const EN: Record<string, string> = {
   'gesperrt': 'locked',
   'Springer können in mehreren Hotels eingeplant werden. Das Stammhaus pflegt Daten, Lohn und Urlaub.': 'Floating staff can be rostered at several hotels. The home hotel maintains data, pay and vacation.',
   'Hotels speichern': 'Save hotels',
+  'Aktionen': 'Actions',
+  'Hotel wählen': 'Choose hotel',
+  'PIN gesperrt. Bitte die Leitung fragen.': 'PIN locked. Please ask your manager.',
 };

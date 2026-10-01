@@ -29,9 +29,9 @@ export default function Analytics() {
 
       {(overview.data?.hotels?.length ?? 0) > 1 && (
         <Section title={t('Alle Hotels')}>
-          <table className="table"><thead><tr><th>{t('Hotel')}</th><th>{t('Personen')}</th><th>{t('Geplant')}</th><th>{t('Gearbeitet')}</th><th>{t('Krankenquote')}</th><th>{t('Offen')}</th></tr></thead><tbody>
+          <div className="table-scroll"><table className="table"><thead><tr><th>{t('Hotel')}</th><th>{t('Personen')}</th><th>{t('Geplant')}</th><th>{t('Gearbeitet')}</th><th>{t('Krankenquote')}</th><th>{t('Offen')}</th></tr></thead><tbody>
             {overview.data.hotels.map((h: any) => <tr key={h.hotelId}><td><strong>{h.name}</strong></td><td>{h.headcount}</td><td>{fmtHours(h.scheduledPaidHours, lang)}</td><td>{fmtHours(h.actualPaidHours, lang)}</td><td>{(h.sickRate * 100).toFixed(1)} %</td><td>{h.openCorrections + h.needsReviewEntries}</td></tr>)}
-          </tbody></table>
+          </tbody></table></div>
         </Section>
       )}
 
@@ -50,9 +50,9 @@ export default function Analytics() {
 
       <Section title={t('Stunden vs. Soll')}>
         {hours.isLoading ? <Loading /> : hours.error ? <ErrorBox error={hours.error} /> : (
-          <table className="table"><thead><tr><th>{t('Name')}</th><th>{t('Geplant')}</th><th>{t('Gutschrift')}</th><th>{t('Soll')}</th><th>{t('Differenz')}</th><th /></tr></thead><tbody>
+          <div className="table-scroll"><table className="table"><thead><tr><th>{t('Name')}</th><th>{t('Geplant')}</th><th>{t('Gutschrift')}</th><th>{t('Soll')}</th><th>{t('Differenz')}</th><th><span className="sr-only">{t('Aktionen')}</span></th></tr></thead><tbody>
             {hours.data.byEmployee.map((e: any) => <tr key={e.employeeId}><td><strong>{e.name}</strong>{!e.isHome && <> <Tag kind="outline">{t('Springer')}</Tag></>}</td><td>{fmtHours(e.scheduledPaidHours, lang)}</td><td>{fmtHours(e.creditedHours, lang)}</td><td>{fmtHours(e.targetHours, lang)}</td><td>{fmtHours(e.delta, lang)}</td><td><Tag kind={e.status === 'over_max' ? 'accent' : 'neutral'}>{t(HOURS_STATUS[e.status] ?? e.status)}</Tag></td></tr>)}
-          </tbody></table>
+          </tbody></table></div>
         )}
       </Section>
 
@@ -65,9 +65,9 @@ export default function Analytics() {
               <Stat label={t('Betroffene')} value={abs.data.totals.employeesAffected} />
               <Stat label={t('Quote')} value={`${(abs.data.totals.absenceRate * 100).toFixed(1)} %`} />
             </div>
-            <table className="table"><thead><tr><th>{t('Name')}</th><th>{t('Tage')}</th><th>{t('Fälle')}</th><th>{t('Bradford')}</th><th>{t('Atteste fehlen')}</th></tr></thead><tbody>
+            <div className="table-scroll"><table className="table"><thead><tr><th>{t('Name')}</th><th>{t('Tage')}</th><th>{t('Fälle')}</th><th>{t('Bradford')}</th><th>{t('Atteste fehlen')}</th></tr></thead><tbody>
               {abs.data.byEmployee.filter((e: any) => e.sickDays > 0).map((e: any) => <tr key={e.employeeId}><td><strong>{e.name}</strong></td><td>{e.sickDays}</td><td>{e.spells}</td><td>{e.bradfordFactor}</td><td>{e.missingCertificates || '–'}</td></tr>)}
-            </tbody></table>
+            </tbody></table></div>
           </>
         )}
       </Section>

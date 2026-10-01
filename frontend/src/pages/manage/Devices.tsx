@@ -45,12 +45,12 @@ export default function Devices() {
         </div>
         <ErrorBox error={pair.error} />
         {!devices.data?.length ? <Empty>{t('Noch kein Tablet gekoppelt.')}</Empty> : (
-          <table className="table"><tbody>
+          <div className="table-scroll"><table className="table"><tbody>
             {devices.data.map((d: any) => (
               <tr key={d.id}><td><strong>{d.name}</strong></td><td className="muted">{d.lastSeenAt ? new Intl.DateTimeFormat(lang, { dateStyle: 'short', timeStyle: 'short' }).format(new Date(d.lastSeenAt)) : t('noch nie benutzt')}</td>
                 <td>{d.status === 'active' ? <button className="btn btn-ghost" onClick={() => revoke.mutate(d.id)}>{t('Entkoppeln')}</button> : <Tag kind="neutral">{t('entkoppelt')}</Tag>}</td></tr>
             ))}
-          </tbody></table>
+          </tbody></table></div>
         )}
         <p className="muted small">{t('Auf dem Tablet {url} öffnen und den Code eingeben.', { url: `${window.location.origin}/kiosk` })}</p>
       </Section>

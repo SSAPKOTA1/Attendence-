@@ -52,11 +52,12 @@ npm run lint && npm run typecheck && npm test && npm run build
 npm run test:e2e       # real backend + real PostgreSQL + Chromium; creates, migrates and seeds its own database shiftsched_e2e
 ```
 
-- Unit tests (vitest): date helpers, DST-safe local↔instant conversion, API client (refresh, single-flight, errors, pagination), i18n completeness.
-- End-to-end (Playwright, 18 scenarios): sign-in/redirects/session restore/role access, language switch, roster planning → publish → employee sees it,
+- Unit tests (vitest, 21): date helpers, DST-safe local↔instant conversion, API client (refresh, single-flight, cross-tab Web Lock, downloads, errors, pagination), i18n completeness.
+- End-to-end (Playwright, 32 tests; the e2e backend issues 8-second access tokens so the silent refresh is exercised constantly): sign-in/redirects/session restore/role access, language switch, roster planning → publish → employee sees it,
   rule refusal, vacation request → approval → balance, tablet pairing → wrong PIN → unplanned clock-in with reason → clock-out → supervisor approval,
   onboarding with vacation balances and automatic carry-over, shift design by admin and staffing, invite link → activation, audit log, questions and
-  notifications, wishes, time correction, profile/PIN/password, period lock and payroll download.
+  notifications, wishes, time correction, profile/PIN/password, period lock and payroll download, tablet PIN lock-out and revoked tablets, youth-protection override, allowance/blackout refusals,
+  two tabs refreshing at once, and a crawl of every screen per role (no script errors, no failed API calls, WCAG A/AA via axe-core, no horizontal scroll on a phone).
   Locally set `PW_CHROMIUM=/path/to/chrome` to use an installed Chromium; set `E2E_DATABASE_URL` for another PostgreSQL.
 
 ## Deployment
@@ -69,6 +70,7 @@ The image build itself was not run in the authoring environment (no Docker daemo
 
 ## Known limits
 
+- The employee portal shows times in `Europe/Berlin` (the profile API does not expose the hotel's time zone); the tablet and manager screens use the hotel's own zone.
 - No offline mode: the tablet needs the network (a punch without a server time would be invalid by design).
 - Hotel settings (`PUT /hotels/:id/settings`) are not editable in the UI yet; use the API.
 - Public holidays, anonymisation and the cross-hotel assignment history have no screen yet.

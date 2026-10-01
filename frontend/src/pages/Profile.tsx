@@ -93,12 +93,12 @@ export default function Profile() {
         </Section>
       )}
       <Section title={t('Angemeldete Geräte')} aside={<button className="btn btn-ghost" onClick={() => logoutAll.mutate()}>{t('Überall abmelden')}</button>}>
-        <table className="table"><tbody>
+        <div className="table-scroll"><table className="table"><tbody>
           {(sessions.data ?? []).map((s: any) => (
             <tr key={s.id}><td className="small">{s.userAgent ?? '–'}</td><td className="muted small">{s.ip}</td>
               <td>{s.current ? <Tag kind="accent">{t('Dieses Gerät')}</Tag> : <button className="btn btn-ghost" onClick={() => revoke.mutate(s.id)}>{t('Abmelden')}</button>}</td></tr>
           ))}
-        </tbody></table>
+        </tbody></table></div>
       </Section>
     </div>
   );

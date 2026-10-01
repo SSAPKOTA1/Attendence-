@@ -16,8 +16,8 @@ export default function Wishes() {
   const profile = useQuery({ queryKey: ['me', 'profile'], queryFn: () => get('/me/profile') });
   const hotelId = profile.data?.homeHotel?.id as number | undefined;
   const shifts = useQuery({ queryKey: ['wish-shifts', hotelId], enabled: !!hotelId, queryFn: () => getAll<Shift>('/shifts', { hotelId }) });
-  const shiftWishes = useQuery({ queryKey: ['me', 'shift-wishes', hotelId], enabled: !!hotelId, queryFn: () => get('/shift-wishes', { hotelId, limit: 50 }).then((r) => r.data as any[]) });
-  const leaveWishes = useQuery({ queryKey: ['me', 'leave-wishes', hotelId], enabled: !!hotelId, queryFn: () => get('/leave-wishes', { hotelId, limit: 50 }).then((r) => r.data as any[]) });
+  const shiftWishes = useQuery({ queryKey: ['me', 'shift-wishes', hotelId], enabled: !!hotelId, queryFn: () => getAll<any>('/shift-wishes', { hotelId }) });
+  const leaveWishes = useQuery({ queryKey: ['me', 'leave-wishes', hotelId], enabled: !!hotelId, queryFn: () => getAll<any>('/leave-wishes', { hotelId }) });
   const refresh = () => qc.invalidateQueries({ queryKey: ['me'] });
 
   const [date, setDate] = useState(addDays(todayLocal(), 14));
@@ -94,7 +94,7 @@ function WishTable({ rows, cols, onWithdraw, lang }: { rows?: any[]; cols: (w: a
   void lang;
   if (!rows?.length) return <p className="muted">{t('Noch keine Wünsche.')}</p>;
   return (
-    <table className="table"><tbody>
+    <div className="table-scroll"><table className="table"><tbody>
       {rows.map((w) => (
         <tr key={w.id}>
           {cols(w).map((c, i) => <td key={i}>{c}</td>)}
@@ -103,6 +103,6 @@ function WishTable({ rows, cols, onWithdraw, lang }: { rows?: any[]; cols: (w: a
           <td>{w.status === 'pending' && <button className="btn btn-ghost" onClick={() => onWithdraw(w.id)}>{t('Zurückziehen')}</button>}</td>
         </tr>
       ))}
-    </tbody></table>
+    </tbody></table></div>
   );
 }

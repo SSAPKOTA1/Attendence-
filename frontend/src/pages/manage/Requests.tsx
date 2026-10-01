@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { get, patch } from '../../lib/api';
+import { get, getAll, patch } from '../../lib/api';
 import { useI18n } from '../../lib/i18n';
 import { addDays, fmtDate, fmtDays, fmtMinutes, fmtTime, todayLocal, windows } from '../../lib/format';
 import { useHotel } from '../../components/hotel';
@@ -22,11 +22,11 @@ export default function Requests() {
     queryKey: ['req', 'timeoffs', hid], enabled: !!hid,
     queryFn: async () => {
       const parts = await Promise.all(windows(today, 4).map((w) => get('/time-offs', { hotelId: hid, status: 'pending', ...w }).then((r) => r.data as any[])));
-      return [...new Map(parts.flat().map((x) => [x.id, x])).values()];
+      return [...new Map(parts.flat().filter((x) => x.id && x.status === 'pending').map((x) => [x.id, x])).values()];
     },
   });
   const corrections = useQuery({ queryKey: ['req', 'corr', hid], enabled: !!hid, queryFn: () => get('/attendance/corrections', { hotelId: hid, status: 'pending' }).then((r) => r.data as any[]) });
-  const approvals = useQuery({ queryKey: ['req', 'appr', hid], enabled: !!hid, queryFn: () => get('/attendance', { hotelId: hid, from: addDays(today, -61), to: today, approvalStatus: 'pending', limit: 100 }).then((r) => r.data as any[]) });
+  const approvals = useQuery({ queryKey: ['req', 'appr', hid], enabled: !!hid, queryFn: () => getAll<any>('/attendance', { hotelId: hid, from: addDays(today, -61), to: today, approvalStatus: 'pending' }) });
   const wishes = useQuery({ queryKey: ['req', 'wishes', hid], enabled: !!hid, queryFn: () => get(`/hotels/${hid}/planning-dashboard`, { from: today, to: addDays(today, 61) }) });
   const [dec, setDec] = useState<Decision | null>(null);
   const [note, setNote] = useState('');
@@ -59,7 +59,7 @@ export default function Requests() {
 
       <Section title={`${t('Ungeplante Arbeitszeit')} (${approvals.data?.length ?? 0})`}>
         {!approvals.data?.length ? <Empty>{t('Nichts zur Freigabe.')}</Empty> : (
-          <table className="table"><tbody>
+          <div className="table-scroll"><table className="table"><tbody>
             {approvals.data.map((e: any) => (
               <tr key={e.id}>
                 <td><strong>{e.employee?.displayName ?? nameOf(e.employeeId)}</strong></td>
@@ -68,13 +68,13 @@ export default function Requests() {
                 <td>{e.status === 'closed' ? buttons('approval', e.id, nameOf(e.employeeId)) : <Tag kind="outline">{t('läuft noch')}</Tag>}</td>
               </tr>
             ))}
-          </tbody></table>
+          </tbody></table></div>
         )}
       </Section>
 
       <Section title={`${t('Abwesenheiten')} (${timeoffs.data?.length ?? 0})`}>
         {timeoffs.isLoading ? <Loading /> : !timeoffs.data?.length ? <Empty>{t('Keine offenen Abwesenheiten.')}</Empty> : (
-          <table className="table"><tbody>
+          <div className="table-scroll"><table className="table"><tbody>
             {timeoffs.data.map((x: any) => (
               <tr key={x.id}>
                 <td><strong>{nameOf(x.employeeId)}</strong></td><td>{t(TYPES[x.type] ?? x.type)}</td>
@@ -82,13 +82,13 @@ export default function Requests() {
                 <td className="muted small">{x.reason}</td><td>{buttons('timeoff', x.id, nameOf(x.employeeId))}</td>
               </tr>
             ))}
-          </tbody></table>
+          </tbody></table></div>
         )}
       </Section>
 
       <Section title={`${t('Stempelkorrekturen')} (${corrections.data?.length ?? 0})`}>
         {!corrections.data?.length ? <Empty>{t('Keine offenen Korrekturen.')}</Empty> : (
-          <table className="table"><tbody>
+          <div className="table-scroll"><table className="table"><tbody>
             {corrections.data.map((c: any) => (
               <tr key={c.id}>
                 <td><strong>{nameOf(c.employeeId)}</strong></td>
@@ -96,13 +96,13 @@ export default function Requests() {
                 <td className="muted small">{c.reason}</td><td>{buttons('correction', c.id, nameOf(c.employeeId))}</td>
               </tr>
             ))}
-          </tbody></table>
+          </tbody></table></div>
         )}
       </Section>
 
       <Section title={`${t('Wünsche')} (${sw.length + lw.length})`}>
         {sw.length + lw.length === 0 ? <Empty>{t('Keine offenen Wünsche.')}</Empty> : (
-          <table className="table"><tbody>
+          <div className="table-scroll"><table className="table"><tbody>
             {sw.map((w: any) => (
               <tr key={`s${w.id}`}>
                 <td><strong>{w.employee?.displayName ?? w.employee?.name}</strong></td><td>{w.kind === 'avoid' && !w.shift ? t('Freiwunsch') : t('Schichtwunsch')}</td>
@@ -117,7 +117,7 @@ export default function Requests() {
                 <td className="muted small">{w.reason}</td><td>{buttons('leave-wish', w.id, '')}</td>
               </tr>
             ))}
-          </tbody></table>
+          </tbody></table></div>
         )}
       </Section>
 

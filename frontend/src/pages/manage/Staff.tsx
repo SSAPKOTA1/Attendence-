@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
-import { get, getAll, post } from '../../lib/api';
+import { getAll, post } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { useI18n } from '../../lib/i18n';
 import { useHotel } from '../../components/hotel';
@@ -18,7 +18,7 @@ export default function Staff() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('active');
   const [creating, setCreating] = useState(false);
-  const q = useQuery({ queryKey: ['staff', hotel?.id, status, search], enabled: !!hotel, queryFn: () => get('/employees', { hotelId: hotel!.id, status, search, limit: 100 }) });
+  const q = useQuery({ queryKey: ['staff', hotel?.id, status, search], enabled: !!hotel, queryFn: () => getAll<Employee>('/employees', { hotelId: hotel!.id, status, search }) });
   if (!hotel) return <Loading />;
   return (
     <div className="page">
@@ -30,11 +30,11 @@ export default function Staff() {
         <Field label={t('Suche')}>{(i) => <input id={i} className="input" type="search" value={search} onChange={(e) => setSearch(e.target.value)} />}</Field>
         <Field label={t('Status')}>{(i) => <select id={i} className="input" value={status} onChange={(e) => setStatus(e.target.value)}><option value="active">{t('Aktiv')}</option><option value="on_leave">{t('Beurlaubt')}</option><option value="terminated">{t('Ausgeschieden')}</option></select>}</Field>
       </div>
-      {q.isLoading ? <Loading /> : q.error ? <ErrorBox error={q.error} /> : (q.data?.data ?? []).length === 0 ? <Empty>{t('Keine Mitarbeitenden.')}</Empty> : (
-        <table className="table">
+      {q.isLoading ? <Loading /> : q.error ? <ErrorBox error={q.error} /> : (q.data ?? []).length === 0 ? <Empty>{t('Keine Mitarbeitenden.')}</Empty> : (
+        <div className="table-scroll"><table className="table">
           <thead><tr><th>{t('Name')}</th><th>{t('Nr.')}</th><th>{t('Beschäftigung')}</th><th>{t('Abteilungen')}</th><th>{t('Stammhaus')}</th></tr></thead>
           <tbody>
-            {q.data.data.map((e: Employee) => (
+            {q.data!.map((e: Employee) => (
               <tr key={e.id}>
                 <td><Link to={`/manage/staff/${e.id}`}><strong>{e.firstName} {e.lastName}</strong></Link>{e.isHome === false && <> <Tag kind="outline">{t('Springer')}</Tag></>}</td>
                 <td className="muted">{e.employeeNumber ?? '–'}</td>
@@ -44,7 +44,7 @@ export default function Staff() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       )}
       {creating && <CreateDialog onClose={() => setCreating(false)} />}
     </div>

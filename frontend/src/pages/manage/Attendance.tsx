@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { get, post } from '../../lib/api';
+import { getAll, post } from '../../lib/api';
 import { useI18n } from '../../lib/i18n';
 import { addDays, fmtDate, fmtMinutes, fmtTime, todayLocal } from '../../lib/format';
 import { useHotel } from '../../components/hotel';
@@ -24,7 +24,7 @@ export default function ManageAttendance() {
   const { data: employees, nameOf } = useHotelEmployees(hid);
   const q = useQuery({
     queryKey: ['mattendance', hid, from, to, emp, status], enabled: !!hid,
-    queryFn: () => get('/attendance', { hotelId: hid, from, to, employeeId: emp, status, limit: 100 }),
+    queryFn: () => getAll<any>('/attendance', { hotelId: hid, from, to, employeeId: emp, status }),
   });
   if (!hotel) return <Loading />;
   return (
@@ -36,11 +36,11 @@ export default function ManageAttendance() {
         <Field label={t('Mitarbeiter')}>{(i) => <select id={i} className="input" value={emp} onChange={(e) => setEmp(e.target.value)}><option value="">{t('Alle')}</option>{(employees ?? []).map((x) => <option key={x.id} value={x.id}>{x.firstName} {x.lastName}</option>)}</select>}</Field>
         <Field label={t('Status')}>{(i) => <select id={i} className="input" value={status} onChange={(e) => setStatus(e.target.value)}><option value="">{t('Alle')}</option><option value="open">{t('Offen')}</option><option value="needs_review">{t('Prüfung')}</option><option value="closed">{t('Geschlossen')}</option></select>}</Field>
       </div>
-      {q.isLoading ? <Loading /> : q.error ? <ErrorBox error={q.error} /> : (q.data?.data ?? []).length === 0 ? <Empty>{t('Keine Einträge.')}</Empty> : (
-        <table className="table">
-          <thead><tr><th>{t('Datum')}</th><th>{t('Mitarbeiter')}</th><th>{t('Von – bis')}</th><th>{t('Pause')}</th><th>{t('Gearbeitet')}</th><th>{t('Hinweise')}</th><th /></tr></thead>
+      {q.isLoading ? <Loading /> : q.error ? <ErrorBox error={q.error} /> : (q.data ?? []).length === 0 ? <Empty>{t('Keine Einträge.')}</Empty> : (
+        <div className="table-scroll"><table className="table">
+          <thead><tr><th>{t('Datum')}</th><th>{t('Mitarbeiter')}</th><th>{t('Von – bis')}</th><th>{t('Pause')}</th><th>{t('Gearbeitet')}</th><th>{t('Hinweise')}</th><th><span className="sr-only">{t('Aktionen')}</span></th></tr></thead>
           <tbody>
-            {q.data.data.map((e: any) => (
+            {q.data!.map((e: any) => (
               <tr key={e.id}>
                 <td>{fmtDate(instantToLocal(e.clockInAt, tz).slice(0, 10), lang)}</td>
                 <td><strong>{e.employee?.displayName ?? nameOf(e.employeeId)}</strong></td>
@@ -55,7 +55,7 @@ export default function ManageAttendance() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       )}
       {edit && <CloseEntryDialog entryId={edit.id} clockInAt={edit.clockInAt} clockOutAt={edit.clockOutAt} breakMinutes={edit.breakMinutes} tz={tz} onClose={() => setEdit(null)} />}
       {adding && <AddEntry hotelId={hotel.id} tz={tz} employees={employees ?? []} onClose={() => setAdding(false)} />}

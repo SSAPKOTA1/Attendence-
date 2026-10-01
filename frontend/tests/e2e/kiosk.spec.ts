@@ -65,3 +65,51 @@ test('a tablet that was never paired asks for a code; the PIN pad enforces 6 dig
   await page.getByRole('button', { name: 'Koppeln' }).click();
   await expect(page.getByRole('alert')).toBeVisible();
 });
+
+test('tablet shows the hotel name, locks the PIN after repeated failures and a manager unlocks it', async ({ page, request }) => {
+  const mgr = await apiAs(request, MANAGER);
+  const code = (await mgr.post('/kiosk/pairing-codes', { hotelId: 1, deviceName: 'Lock tablet' })).body.pairingCode as string;
+  const emp = ((await mgr.get('/employees?hotelId=1&limit=100')).data as any[]).find((e) => e.firstName === 'Mia');
+  const pin = (await mgr.post(`/employees/${emp.id}/pin/reset`)).body.pin as string;
+  await page.goto('/kiosk');
+  await page.getByLabel('Kopplungscode').fill(code);
+  await page.getByRole('button', { name: 'Koppeln' }).click();
+  await expect(page.getByText('Trip Inn Frankfurt')).toBeVisible();
+
+  const wrong = pin === '999999' ? '888888' : '999999';
+  await page.getByLabel('Name suchen').fill('Mia');
+  for (let i = 0; i < 5; i++) {
+    await page.getByRole('button', { name: /Mia K/ }).click().catch(() => {});
+    await enterPin(page, wrong);
+    await expect(page.getByRole('alert')).toBeVisible();
+    if (i < 4) await page.getByRole('button', { name: 'Abbrechen' }).click();
+    if (i < 4) await page.getByLabel('Name suchen').fill('Mia');
+  }
+  await expect(page.getByRole('alert')).toContainText(/PIN gesperrt/);
+  await page.getByRole('button', { name: 'Abbrechen' }).click();
+  await page.getByLabel('Name suchen').fill('Mia');
+  await page.getByRole('button', { name: /Mia K/ }).click();
+  await enterPin(page, pin); // the right PIN is refused while locked
+  await expect(page.getByRole('alert')).toContainText(/PIN gesperrt/);
+
+  expect((await mgr.post(`/employees/${emp.id}/pin/unlock`)).status).toBe(204);
+  await page.getByRole('button', { name: 'Abbrechen' }).click();
+  await page.getByLabel('Name suchen').fill('Mia');
+  await page.getByRole('button', { name: /Mia K/ }).click();
+  await enterPin(page, pin);
+  await expect(page.getByRole('button', { name: 'Einstempeln' })).toBeVisible();
+});
+
+test('a revoked tablet falls back to the pairing screen', async ({ page, request }) => {
+  const mgr = await apiAs(request, MANAGER);
+  const code = (await mgr.post('/kiosk/pairing-codes', { hotelId: 1, deviceName: 'Revoke me' })).body.pairingCode as string;
+  await page.goto('/kiosk');
+  await page.getByLabel('Kopplungscode').fill(code);
+  await page.getByRole('button', { name: 'Koppeln' }).click();
+  await expect(page.getByLabel('Name suchen')).toBeVisible();
+  const devices = (await mgr.get('/kiosk/devices')).data as any[];
+  const mine = devices.find((d) => d.name === 'Revoke me');
+  await request.delete(`http://localhost:3100/api/v1/kiosk/devices/${mine.id}`, { headers: { Authorization: `Bearer ${(await (await request.post('http://localhost:3100/api/v1/auth/login', { data: { login: MANAGER, password: 'Demo-Password-2026' }, headers: { 'X-Client': 'native' } })).json()).accessToken}` } });
+  await page.getByLabel('Name suchen').fill('Ma'); // next roster request is refused
+  await expect(page.getByRole('heading', { name: 'Tablet einrichten' })).toBeVisible();
+});

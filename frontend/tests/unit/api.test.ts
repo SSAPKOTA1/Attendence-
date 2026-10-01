@@ -1,4 +1,4 @@
-import { api, ApiError, getAll, setAccessToken, setSessionLostHandler } from '../../src/lib/api';
+import { api, ApiError, download, getAll, setAccessToken, setSessionLostHandler } from '../../src/lib/api';
 
 const json = (status: number, body: unknown) => new Response(status === 204 ? null : JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 let calls: { url: string; init: RequestInit }[] = [];
@@ -14,6 +14,27 @@ const mockFetch = (...responses: (Response | ((url: string) => Response))[]) => 
 afterEach(() => { vi.unstubAllGlobals(); setAccessToken(null); });
 
 describe('api client', () => {
+  it('serialises the refresh between tabs with a Web Lock', async () => {
+    const request = vi.fn(async (_name: string, fn: () => Promise<unknown>) => fn());
+    vi.stubGlobal('navigator', { ...navigator, locks: { request } });
+    setAccessToken('old');
+    mockFetch(json(401, { error: { code: 'TOKEN_EXPIRED', message: 'x' } }), json(200, { accessToken: 'new' }), json(200, { ok: 1 }));
+    await api('GET', '/x');
+    expect(request).toHaveBeenCalledWith('refresh-session', expect.any(Function));
+  });
+
+  it('downloads refresh an expired token and retry once', async () => {
+    setAccessToken('old');
+    const click = vi.fn();
+    vi.spyOn(document, 'createElement').mockReturnValue({ click, set href(_v: string) {}, set download(_v: string) {} } as any);
+    (URL as any).createObjectURL = vi.fn(() => 'blob:x'); (URL as any).revokeObjectURL = vi.fn();
+    mockFetch(json(401, { error: { code: 'TOKEN_EXPIRED', message: 'x' } }), json(200, { accessToken: 'new' }), new Response('a;b\n', { status: 200 }));
+    await download('/hotels/1/payroll-export', { month: '2026-09' }, 'x.csv');
+    expect(calls.map((c) => c.url)).toEqual(['/api/v1/hotels/1/payroll-export?month=2026-09', '/api/v1/auth/refresh', '/api/v1/hotels/1/payroll-export?month=2026-09']);
+    expect(click).toHaveBeenCalled();
+    vi.restoreAllMocks();
+  });
+
   it('sends the bearer token, web headers and a JSON body', async () => {
     setAccessToken('abc');
     mockFetch(json(200, { ok: 1 }));
@@ -72,5 +93,8 @@ describe('api client', () => {
     mockFetch(json(200, { data: [1, 2], meta: { total: 3 } }), json(200, { data: [3], meta: { total: 3 } }));
     expect(await getAll('/things')).toEqual([1, 2, 3]);
     expect(calls[1].url).toContain('page=2');
+    mockFetch(json(200, { data: [1, 2, 3] })); // unpaginated list: no meta, one request
+    expect(await getAll('/attendance')).toEqual([1, 2, 3]);
+    expect(calls).toHaveLength(1);
   });
 });

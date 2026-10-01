@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { get, patch, post } from '../../lib/api';
+import { get, getAll, patch, post } from '../../lib/api';
 import { isManager, useAuth } from '../../lib/auth';
 import { useI18n } from '../../lib/i18n';
 import { Dialog, Empty, ErrorBox, Field, Loading, Tag } from '../../components/ui';
@@ -13,7 +13,7 @@ export default function Inquiries() {
   const { t, lang } = useI18n();
   const { user } = useAuth();
   const qc = useQueryClient();
-  const list = useQuery({ queryKey: ['inquiries'], queryFn: () => get('/inquiries', { limit: 50 }).then((r) => r.data) });
+  const list = useQuery({ queryKey: ['inquiries'], queryFn: () => getAll<any>('/inquiries') });
   const [openId, setOpenId] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
   const [subject, setSubject] = useState('');
@@ -31,9 +31,9 @@ export default function Inquiries() {
         {user?.employeeId && <button className="btn btn-primary" onClick={() => setCreating(true)}>{t('Neue Frage')}</button>}
       </header>
       {list.isLoading ? <Loading /> : list.error ? <ErrorBox error={list.error} /> : (list.data ?? []).length === 0 ? <Empty>{t('Keine Fragen.')}</Empty> : (
-        <table className="table">
+        <div className="table-scroll"><table className="table">
           <tbody>
-            {list.data.map((i: any) => (
+            {list.data!.map((i: any) => (
               <tr key={i.id} className="clickable" onClick={() => setOpenId(i.id)}>
                 <td><button className="linklike" onClick={() => setOpenId(i.id)}>{i.subject}</button></td>
                 <td className="muted">{t(CATEGORY[i.category] ?? i.category)}</td>
@@ -42,7 +42,7 @@ export default function Inquiries() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       )}
       {creating && (
         <Dialog title={t('Frage an die Leitung')} onClose={() => setCreating(false)}

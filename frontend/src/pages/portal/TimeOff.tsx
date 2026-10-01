@@ -16,7 +16,8 @@ export default function TimeOff() {
   const [params] = useSearchParams();
   const year = Number(todayLocal().slice(0, 4));
   const allowance = useQuery({ queryKey: ['me', 'allowance', year], queryFn: () => get('/employees/me/vacation-allowance', { year }) });
-  const list = useQuery({ queryKey: ['me', 'timeoffs'], queryFn: () => get('/employees/me/time-offs').then((r) => r.data) });
+  // the API defaults to the current calendar year; requests are often made for next year
+  const list = useQuery({ queryKey: ['me', 'timeoffs', year], queryFn: () => get('/employees/me/time-offs', { from: `${year}-01-01`, to: `${year + 1}-12-31` }).then((r) => r.data) });
 
   const [type, setType] = useState(params.get('sick') ? 'sick_leave' : 'annual_leave');
   const [start, setStart] = useState(todayLocal());
@@ -81,7 +82,7 @@ export default function TimeOff() {
       </Section>
       <Section title={t('Meine Anträge')}>
         {list.isLoading ? <Loading /> : (list.data ?? []).length === 0 ? <p className="muted">{t('Noch keine Anträge.')}</p> : (
-          <table className="table">
+          <div className="table-scroll"><table className="table">
             <tbody>
               {(list.data ?? []).map((x: any) => (
                 <tr key={x.id}>
@@ -93,7 +94,7 @@ export default function TimeOff() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
       </Section>
     </div>

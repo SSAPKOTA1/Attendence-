@@ -46,13 +46,13 @@ export default function Dashboard() {
 
       <Section title={t('Nächste Dienste')}>
         {d.nextShifts.length === 0 ? <p className="muted">{t('Keine weiteren Dienste veröffentlicht.')}</p> : (
-          <table className="table">
+          <div className="table-scroll"><table className="table">
             <tbody>
               {d.nextShifts.map((s: any, i: number) => (
                 <tr key={i}><td>{fmtDate(s.date, lang)}</td><td><strong>{s.shiftName}</strong></td><td>{s.startTime}–{s.endTime}</td><td className="muted">{s.hotelName}</td></tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
         {d.planPublishedUntil?.map((p: any) => <p key={p.hotelId} className="muted small">{p.date ? t('Dienstplan {hotel} veröffentlicht bis {date}', { hotel: p.hotelName, date: fmtDate(p.date, lang, { day: 'numeric', month: 'short' }) }) : t('Dienstplan {hotel}: noch nichts veröffentlicht', { hotel: p.hotelName })}</p>)}
       </Section>

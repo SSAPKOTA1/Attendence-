@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { login, MANAGER, MARIA } from './helpers';
+import { ADMIN, apiAs, login, MANAGER, MARIA } from './helpers';
 
 test('manager plans a shift, publishes it, and the employee sees it', async ({ page, browser }) => {
   await login(page, MANAGER);
@@ -51,4 +51,20 @@ test('rule violations are shown instead of saved: a second overlapping shift is 
   await page.keyboard.press('Escape');
   await expect(row.getByRole('button', { name: /Early/ })).toHaveCount(1);
   await expect(row.getByRole('button', { name: /Breakfast/ })).toHaveCount(0);
+});
+
+test('youth protection: a night shift for a minor needs a written reason before it can be saved', async ({ page, request }) => {
+  const admin = await apiAs(request, ADMIN);
+  expect((await admin.post('/employees', { firstName: 'Tim', lastName: 'Teen', payType: 'hourly', homeHotelId: 1, birthDate: '2010-05-05', employmentType: 'apprentice', departmentIds: [1] })).status).toBe(201);
+  await login(page, MANAGER);
+  await page.getByRole('button', { name: 'Nächste Woche' }).click();
+  const row = page.getByRole('row', { name: /Tim Teen/ });
+  await row.getByRole('cell').nth(2).click();
+  const dlg = page.getByRole('dialog');
+  await dlg.getByLabel('Dienst').selectOption({ label: 'Night 22:00–06:00' });
+  await expect(dlg.getByText(/Jugendarbeitsschutz/)).toBeVisible();
+  await expect(dlg.getByRole('button', { name: 'Eintragen' })).toBeDisabled();
+  await dlg.getByLabel('Begründung (nötig)').fill('Agreed with the apprentice and the guardian');
+  await dlg.getByRole('button', { name: 'Eintragen' }).click();
+  await expect(row.getByRole('button', { name: /Night 22:00–06:00/ })).toBeVisible();
 });

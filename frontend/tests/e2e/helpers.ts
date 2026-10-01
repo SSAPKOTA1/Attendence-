@@ -11,6 +11,7 @@ export async function login(page: Page, who: string) {
   await page.getByLabel(/E-Mail oder Benutzername|E-mail or username/).fill(who);
   await page.getByLabel(/Passwort|Password/).fill(PASSWORD);
   await page.getByRole('button', { name: /^(Anmelden|Sign in)$/ }).click();
+  await page.waitForURL((u) => !u.pathname.startsWith('/login')); // never navigate away before the session exists
 }
 
 /** Direct API session for set-up steps that are not what the test is about. */
