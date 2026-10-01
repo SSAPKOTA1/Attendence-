@@ -206,3 +206,18 @@ describe('misc', () => {
     expect(toCsv(['a', 'b'], [{ a: 'x,y', b: 'q"uote' }])).toBe('a,b\r\n"x,y","q""uote"\r\n');
   });
 });
+
+describe('config safety', () => {
+  it('refuses TRUST_PROXY=true (spoofable client IP)', async () => {
+    const { execFileSync } = await import('node:child_process');
+    const run = (v: string) =>
+      execFileSync(process.execPath, ['-e', "require('tsx/cjs'); require('./src/config')"], {
+        cwd: process.cwd(),
+        env: { ...process.env, NODE_ENV: 'test', TRUST_PROXY: v },
+        stdio: 'pipe',
+      });
+    expect(() => run('true')).toThrow(/TRUST_PROXY/);
+    expect(() => run('1')).not.toThrow();
+    expect(() => run('loopback')).not.toThrow();
+  });
+});

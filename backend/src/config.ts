@@ -12,7 +12,11 @@ const EnvSchema = z.object({
   DATABASE_URL: z.string().min(1).default('postgres://postgres:postgres@localhost:5432/shiftsched'),
   JWT_SECRET: z.string().min(32).default('dev-only-secret-change-me-0123456789abcdef'),
   // number of reverse proxies in front of the app (X-Forwarded-For hops) or 'loopback'; drives req.ip for rate limits and the kiosk IP allow-list
-  TRUST_PROXY: z.string().default('loopback'),
+  TRUST_PROXY: z
+    .string()
+    .default('loopback')
+    // 'true' would trust the whole X-Forwarded-For chain and let clients spoof their IP past rate limits and the kiosk allow-list
+    .refine((v) => v.trim() !== '' && !/^(true|false)$/i.test(v.trim()), "use a number of proxy hops, 'loopback', or explicit IPs/CIDRs, never 'true'"),
   ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(900),
   REFRESH_TTL_DAYS: z.coerce.number().int().positive().default(30),
   REFRESH_ABSOLUTE_DAYS: z.coerce.number().int().positive().default(90),
