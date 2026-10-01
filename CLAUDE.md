@@ -9,3 +9,4 @@
 - Commands (from `backend/`): `npm run typecheck`, `npm run lint`, `npm test`, `npm run migrate`, `npm run seed`, `npm run dev`.
 - Tests need `TEST_DATABASE_URL` (default `postgres://postgres:postgres@localhost:5432/shiftsched_test`).
 - Implementation notes and interpretations of ambiguous spec points: `docs/IMPLEMENTATION_PLAN.md`.
+- Frontend lives in `frontend/` (React 18, TypeScript, Vite; see `docs/FRONTEND.md`). Commands from `frontend/`: `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, `npm run test:e2e` (starts the real backend + PostgreSQL, needs Chromium: `PW_CHROMIUM`). German is the source text for UI strings: every `t('…')` needs an English entry in `src/lib/en.ts`. The frontend never changes the backend's API; if the UI needs something new, extend the spec first.
