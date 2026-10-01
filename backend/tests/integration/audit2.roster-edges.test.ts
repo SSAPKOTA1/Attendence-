@@ -203,8 +203,8 @@ describe('audit 2: roster and absence edge cases', () => {
     expect((await M1().get(`/employees/${w.maria}/vacation-allowance?year=2026`)).body.remainingDays).toBe(10);
     expect((await M1().post(`/employees/${w.maria}/time-offs`, { type: 'annual_leave', startDate: '2026-11-02', endDate: '2026-11-13' })).status).toBe(201); // 10 days
     expect((await M1().post(`/employees/${w.maria}/time-offs`, { type: 'annual_leave', startDate: '2026-11-16', endDate: '2026-11-16' })).body.error.code).toBe('ALLOWANCE_EXCEEDED');
-    // another year starts with its own default row
-    expect((await M1().get(`/employees/${w.maria}/vacation-allowance?year=2027`)).body).toMatchObject({ vacationDaysPerYear: 30, usedDays: 0, remainingDays: 30 });
+    // the next year starts from the previous year's yearly days; nothing was left to carry over (SPEC 1.14)
+    expect((await M1().get(`/employees/${w.maria}/vacation-allowance?year=2027`)).body).toMatchObject({ vacationDaysPerYear: 10, carriedOverDays: 0, usedDays: 0, remainingDays: 10 });
     expect((await as(w.tokens.maria).put(`/employees/me/vacation-allowance`, { year: 2026, vacationDaysPerYear: 99 })).status).toBe(403);
   });
 

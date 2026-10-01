@@ -39,6 +39,20 @@ const employeeBody = z.object({
   payType: z.enum(['salary', 'hourly']),
   publicHolidaysOff: z.boolean().default(true),
   removeFutureEntries: z.boolean().optional(),
+  // onboarding balance (SPEC 1.14); year defaults to the current year
+  vacation: z
+    .object({
+      year: z.number().int().min(2000).max(2100).optional(),
+      vacationDaysPerYear: z.number().min(0).max(366),
+      carriedOverDays: z.number().min(0).max(366).default(0),
+      remainingThisYearDays: z.number().min(0).max(366).optional(),
+      carryOverExpiresOn: zDate.nullable().optional(),
+    })
+    .refine((v) => v.remainingThisYearDays === undefined || v.remainingThisYearDays <= v.vacationDaysPerYear, {
+      message: 'remainingThisYearDays cannot exceed vacationDaysPerYear',
+      path: ['remainingThisYearDays'],
+    })
+    .optional(),
   homeHotelId: z.number().int().positive(),
   hotelIds: z.array(z.number().int().positive()).optional(),
   departmentIds: z.array(z.number().int().positive()).optional(),
@@ -67,7 +81,7 @@ employeesRouter.post('/employees', requireRole('admin'), async (req, res) => {
 });
 
 employeesRouter.patch('/employees/:id', requireRole('manager'), async (req, res) => {
-  const body = parseBody(employeeBody.omit({ homeHotelId: true, hotelIds: true }).extend({ publicHolidaysOff: z.boolean().optional() }).partial(), req);
+  const body = parseBody(employeeBody.omit({ homeHotelId: true, hotelIds: true, vacation: true }).extend({ publicHolidaysOff: z.boolean().optional() }).partial(), req);
   res.json(await withTransaction((db) => emp.updateEmployee(db, req.ctx!, req.params.id as string, body)));
 });
 

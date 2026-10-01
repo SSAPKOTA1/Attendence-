@@ -184,6 +184,24 @@ components:
         publicHolidaysOff:
           type: boolean
           default: true
+        vacation:
+          type: object
+          description: onboarding balance (SPEC 1.14)
+          properties:
+            year:
+              type: integer
+            vacationDaysPerYear:
+              type: number
+            carriedOverDays:
+              type: number
+            remainingThisYearDays:
+              type: number
+            carryOverExpiresOn:
+              type:
+                - string
+                - "null"
+          required:
+            - vacationDaysPerYear
         status:
           enum:
             - active

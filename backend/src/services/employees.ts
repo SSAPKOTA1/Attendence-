@@ -6,6 +6,7 @@ import { now } from '../clock';
 import { audit } from './audit';
 import { getEmployeeAccess, EmployeeAccess, requireHomeManager, resolveHotelId } from './access';
 import { revokeAllSessions } from './tokens';
+import { setOpeningBalance } from './allowance';
 
 export interface EmployeeInput {
   firstName: string;
@@ -25,6 +26,7 @@ export interface EmployeeInput {
   publicHolidaysOff?: boolean;
   /** with a termination: delete roster entries after the termination date instead of refusing */
   removeFutureEntries?: boolean;
+  vacation?: { year?: number; vacationDaysPerYear: number; carriedOverDays: number; remainingThisYearDays?: number; carryOverExpiresOn?: string | null };
   homeHotelId: number;
   hotelIds?: number[];
   departmentIds?: number[];
@@ -194,6 +196,16 @@ export async function createEmployee(db: Db, ctx: AuthContext, input: EmployeeIn
   }
   await insertDepartments(db, e.id, departmentIds);
   await db.query('INSERT INTO employee_work_targets (employee_id) VALUES ($1)', [e.id]);
+  if (input.vacation) {
+    const v = input.vacation;
+    await setOpeningBalance(db, e.id, {
+      year: v.year ?? Number(today().slice(0, 4)),
+      vacationDaysPerYear: v.vacationDaysPerYear,
+      carriedOverDays: v.carriedOverDays,
+      remainingThisYearDays: v.remainingThisYearDays ?? v.vacationDaysPerYear,
+      carryOverExpiresOn: v.carryOverExpiresOn ?? null,
+    });
+  }
   await audit(db, ctx, {
     action: 'employee.create', entityType: 'employee', entityId: e.id, hotelId: input.homeHotelId,
     after: { status, workWeekdays: e.work_weekdays, employmentType: e.employment_type, payType: e.pay_type, publicHolidaysOff: e.public_holidays_off, hotelIds, departmentIds },

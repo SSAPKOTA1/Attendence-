@@ -87,6 +87,11 @@ Clock-in on a **shared hotel tablet** with **name + PIN only**; **automatic dedu
 | Notifications | `time_approval_requested` to the hotel's managers when the hours become final (clock-out); `time_approval_decided` to the employee (ids only, never the note); live board `awaitingApproval` |
 
 
+### 1.14 Vacation at onboarding and automatic carry-over (owner decision)
+- **Onboarding:** `POST /employees` accepts `vacation: { year?, vacationDaysPerYear, carriedOverDays (left from last year), remainingThisYearDays (left of this year's own entitlement), carryOverExpiresOn? }`. The days already taken before the employee entered the system are stored as `alreadyTakenDays = vacationDaysPerYear − remainingThisYearDays` and count as used (carry-over is consumed first). `remainingDays = vacationDaysPerYear + carriedOverDays − usedDays`.
+- **Automatic carry-over:** a later year's allowance is created from the previous year: same `vacationDaysPerYear`, `carriedOverDays` = what is left of the previous year (never negative, capped by hotel setting `absence.maxCarryOverDays`, default no cap), expiring on `absence.carryOverExpiresOn` (`MM-DD`, default `03-31`, `null` = never). It is recalculated on every read, so later approvals or cancellations in the previous year change it. Unused carry-over lapses after the expiry date (R9).
+- **Manual override:** `PUT /employees/:id/vacation-allowance` with a number in `carriedOverDays` fixes it by hand; `null` returns to automatic; `alreadyTakenDays` is writable. Allowance responses add `carryOverAutomatic` and `alreadyTakenDays`. Migration `0006`.
+
 ### 1.13 Forgotten clock-out on a planned shift (owner decision)
 If an employee forgets to clock out of a **planned** shift, the hourly job closes the entry once `attendance.autoCloseAfterPlannedEndHours` (default 5, `null` = off) have passed after the planned shift end: `clockOutAt` = planned end, `breakMinutes` = the shift's scheduled break (capped below the gross time), `sourceOut` = `system`, anomaly `auto_closed_planned_hours`, managers are notified (`needs_review_entry`, `anomaly: auto_closed`) and the audit log records `attendance.auto_close`. The credited hours run from the real clock-in to the planned end. Not auto-closed: unplanned entries (no planned hours exist; they become `needs_review` after `needsReviewAfterHours`), entries clocked in after the planned end, and entries whose day is in a locked period. A manager can still correct the entry (AT corrections). This replaces the "never auto-closed" part of R13.7 for planned shifts.
 
@@ -303,7 +308,7 @@ Absences belong to the **employee**: once approved they block rostering at **eve
 - before `carryOverExpiresOn` (or if none): `remaining = vacationDaysPerYear + carriedOverDays − usedDays`
 - after it: `remaining = vacationDaysPerYear + min(carriedOverDays, usedOnOrBeforeExpiry) − usedDays` (unused carry-over lapses).
 
-Creating annual leave needing more than `remaining` in any affected year → `422 ALLOWANCE_EXCEEDED` (details per year). A request spanning New Year simply consumes days from both years. A missing allowance row is auto-created with 30 days. `PUT .../vacation-allowance` returns warning `below_statutory_minimum` for a minor when `vacationDaysPerYear` is below `ceil(minimumWerktage × workWeekdays / 6)`, where the minimum is 30 / 27 / 25 Werktage if the employee is under 16 / 17 / 18 at the start of the year (JArbSchG).
+Creating annual leave needing more than `remaining` in any affected year → `422 ALLOWANCE_EXCEEDED` (details per year). A request spanning New Year simply consumes days from both years. A missing allowance row is auto-created: 30 days if the employee has no earlier year, otherwise the previous year's yearly days plus automatic carry-over (SPEC 1.14). `PUT .../vacation-allowance` returns warning `below_statutory_minimum` for a minor when `vacationDaysPerYear` is below `ceil(minimumWerktage × workWeekdays / 6)`, where the minimum is 30 / 27 / 25 Werktage if the employee is under 16 / 17 / 18 at the start of the year (JArbSchG).
 
 ### R10. Wishes
 - **Shift wish** (`kind: prefer | avoid`, priority 1–3): `shiftId` may be omitted only with `avoid`, meaning "I want this day off". Rejected for past dates, for dates where the employee already has an entry (409) or approved absence (422). One pending wish per employee+date+shift.
@@ -618,7 +623,7 @@ POST /employees/1/time-offs   same body + { "reason": "Autumn break", "unassignC
 ```
 (The skipped-holiday line is only an illustration of the shape.) Sick leave: same endpoint with `type: "sick_leave"` and **no `reason`** (400 if sent). Approve: `PATCH /time-offs/5 { "status": "approved", "unassignConflicts": true }`; certificate: `PATCH { "medicalCertificateReceived": true }`.
 
-**Allowance (E9):** `{ employeeId, year, vacationDaysPerYear, carriedOverDays, carryOverExpiresOn, usedDays, pendingDays, remainingDays }`
+**Allowance (E9):** `{ employeeId, year, vacationDaysPerYear, carriedOverDays, carryOverExpiresOn, carryOverAutomatic, alreadyTakenDays, usedDays, pendingDays, remainingDays }`
 
 **Roster entry create / dry run (C4 / C3)**: same body, same response; C3 never writes.
 ```json
