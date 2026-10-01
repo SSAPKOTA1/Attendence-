@@ -117,3 +117,15 @@ test('LODAS export: asks for consultant/client number once, then downloads with 
   expect(download.suggestedFilename()).toMatch(/^payroll-\d{4}-\d{2}\.txt$/);
   await ctx.close();
 });
+
+test('public holidays: the setup tab lists the hotel region\'s holidays per year', async ({ page }) => {
+  await login(page, ADMIN);
+  await page.getByRole('link', { name: 'Einrichtung' }).click();
+  await page.getByRole('tab', { name: 'Feiertage' }).click();
+  const year = page.getByLabel('Jahr');
+  await year.fill('2026');
+  await expect(page.getByRole('row', { name: /Neujahr/ })).toContainText('01.01.2026');
+  await expect(page.getByRole('row', { name: /Tag der Deutschen Einheit/ })).toBeVisible();
+  await year.fill('2027');
+  await expect(page.getByRole('row', { name: /Neujahr/ })).toContainText('01.01.2027');
+});
