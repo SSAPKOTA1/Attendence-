@@ -76,6 +76,9 @@ Clock-in on a **shared hotel tablet** with **name + PIN only**; **automatic dedu
 | Supplements | New **Saturday** supplement (`saturdayMinutes`, wage type `saturday`). The unpaid break is **deducted automatically** from night, Saturday, Sunday and holiday minutes, proportionally (worked ÷ gross) because the break time of day is not recorded |
 | Shift design | Shift templates are designed in the app (`POST/PATCH/DELETE /shifts`) by **admins only** (1.9); managers read them and assign them in the roster; the seed shifts are examples only |
 
+### 1.10 Adding and deleting employees: admin only
+Creating (`E3`) and deleting (`E5`) employees is restricted to admins (`403 FORBIDDEN` for managers). Managers of the home hotel still edit master data, targets, hotel assignments, PINs and absences.
+
 ### 1.9 Shift templates: admin only
 Creating, editing and deleting shift templates (`S2`–`S4`) is restricted to admins (`403 FORBIDDEN` for managers). Managers still read shifts, set staffing requirements and roster employees onto shifts.
 
@@ -405,6 +408,7 @@ Creating annual leave needing more than `remaining` in any affected year → `42
 | Delete another hotel's `off` entry for a floating employee | ✗ | ✓ if the employee is assigned to my hotel | ✓ |
 | Departments, staffing requirements | ✗ | ✓ | ✓ |
 | Shift templates (create/edit/delete) | ✗ | ✗ | ✓ |
+| Add / delete employees | ✗ | ✗ | ✓ |
 | Roster: create/edit/delete/bulk/copy/publish, see drafts | ✗ | ✓ | ✓ |
 | Approve/reject absences, wishes, corrections; manual time entries | ✗ | ✓ | ✓ |
 | Kiosk pairing/devices, period lock (forward only) | ✗ | ✓ | ✓ |
@@ -467,9 +471,9 @@ Role: **P** public, **S** staff and up, **M** manager and up, **A** admin, **D**
 | S6 | PUT | /shifts/:id/staffing-requirements | M | 2 |
 | E1 | GET | /employees | M | 3 |
 | E2 | GET | /employees/:id | M | 3 |
-| E3 | POST | /employees | M | 3 |
+| E3 | POST | /employees | A | 3 |
 | E4 | PATCH | /employees/:id | M | 3 |
-| E5 | DELETE | /employees/:id | M | 3 |
+| E5 | DELETE | /employees/:id | A | 3 |
 | E6 | GET | /employees/:id/work-targets | M | 3 |
 | E7 | PUT | /employees/:id/work-targets | M | 3 |
 | E12 | PUT | /employees/:id/hotels | M | 3 |

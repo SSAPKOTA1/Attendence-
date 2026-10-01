@@ -46,7 +46,7 @@ describe('Phase 9: analytics and audit', () => {
   });
 
   it('#62 audit_logs are append-only and PII-free', async () => {
-    await M1().post('/employees', { payType: 'salary', firstName: 'Secret', lastName: 'Person', email: 'secret@x.de', phone: '0123', hourlyRate: 20, homeHotelId: w.h1, departmentIds: [w.d1], birthDate: '2000-01-01' });
+    await as(w.tokens.admin).post('/employees', { payType: 'salary', firstName: 'Secret', lastName: 'Person', email: 'secret@x.de', phone: '0123', hourlyRate: 20, homeHotelId: w.h1, departmentIds: [w.d1], birthDate: '2000-01-01' });
     await M1().patch(`/employees/${w.jon}`, { firstName: 'Jonathan', phone: '999', hourlyRate: 18 });
     await as(w.tokens.admin).post('/users', { email: 'newmanager@x.de', role: 'manager', hotelIds: [w.h1] });
     await M1().post(`/employees/${w.maria}/pin/reset`);

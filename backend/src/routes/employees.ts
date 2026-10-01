@@ -56,7 +56,8 @@ employeesRouter.get('/employees/:id', requireRole('manager'), async (req, res) =
   res.json(dto);
 });
 
-employeesRouter.post('/employees', requireRole('manager'), async (req, res) => {
+// owner decision (SPEC 1.10): only admins add or delete employees; home-hotel managers still edit them
+employeesRouter.post('/employees', requireRole('admin'), async (req, res) => {
   const body = parseBody(employeeBody, req);
   const dto = await withTransaction((db) => emp.createEmployee(db, req.ctx!, body));
   res.status(201).location(`/api/v1/employees/${dto.id}`).json(dto);
@@ -67,7 +68,7 @@ employeesRouter.patch('/employees/:id', requireRole('manager'), async (req, res)
   res.json(await withTransaction((db) => emp.updateEmployee(db, req.ctx!, req.params.id as string, body)));
 });
 
-employeesRouter.delete('/employees/:id', requireRole('manager'), async (req, res) => {
+employeesRouter.delete('/employees/:id', requireRole('admin'), async (req, res) => {
   await withTransaction((db) => emp.deleteEmployee(db, req.ctx!, req.params.id as string));
   res.status(204).end();
 });

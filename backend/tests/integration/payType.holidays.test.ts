@@ -13,13 +13,13 @@ describe('SPEC 1.8: salaried vs hourly, public holidays off per employee', () =>
   afterAll(() => closePool());
 
   it('pay type is chosen when the employee is created; holidays-off defaults to yes', async () => {
-    const missing = await M1().post('/employees', { firstName: 'No', lastName: 'Type', homeHotelId: w.h1, departmentIds: [w.d1] });
+    const missing = await as(w.tokens.admin).post('/employees', { firstName: 'No', lastName: 'Type', homeHotelId: w.h1, departmentIds: [w.d1] });
     expect(missing.status).toBe(400);
     expect(missing.body.error.details[0].field).toBe('payType');
-    const hourly = await M1().post('/employees', { firstName: 'Hana', lastName: 'Hourly', homeHotelId: w.h1, departmentIds: [w.d1], payType: 'hourly', publicHolidaysOff: false });
+    const hourly = await as(w.tokens.admin).post('/employees', { firstName: 'Hana', lastName: 'Hourly', homeHotelId: w.h1, departmentIds: [w.d1], payType: 'hourly', publicHolidaysOff: false });
     expect(hourly.status).toBe(201);
     expect(hourly.body).toMatchObject({ payType: 'hourly', publicHolidaysOff: false });
-    const salaried = await M1().post('/employees', { firstName: 'Sal', lastName: 'Aried', homeHotelId: w.h1, departmentIds: [w.d1], payType: 'salary' });
+    const salaried = await as(w.tokens.admin).post('/employees', { firstName: 'Sal', lastName: 'Aried', homeHotelId: w.h1, departmentIds: [w.d1], payType: 'salary' });
     expect(salaried.body).toMatchObject({ payType: 'salary', publicHolidaysOff: true });
     const changed = await M1().patch(`/employees/${hourly.body.id}`, { payType: 'salary', publicHolidaysOff: true });
     expect(changed.body).toMatchObject({ payType: 'salary', publicHolidaysOff: true });

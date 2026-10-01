@@ -73,19 +73,19 @@ describe('Phase 2: departments, shifts, staffing', () => {
 
 describe('Phase 3: employees, assignments, holidays', () => {
   it('#12 workWeekdays [0,9] → 400', async () => {
-    const res = await as(w.tokens.manager1).post('/employees', { payType: 'salary', firstName: 'A', lastName: 'B', homeHotelId: w.h1, workWeekdays: [0, 9], departmentIds: [w.d1] });
+    const res = await as(w.tokens.admin).post('/employees', { payType: 'salary', firstName: 'A', lastName: 'B', homeHotelId: w.h1, workWeekdays: [0, 9], departmentIds: [w.d1] });
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_ERROR');
   });
 
   it('#93 employee born less than 15 years ago → 400', async () => {
-    const res = await as(w.tokens.manager1).post('/employees', { payType: 'salary', firstName: 'Kid', lastName: 'Young', homeHotelId: w.h1, birthDate: '2012-01-01', departmentIds: [w.d1] });
+    const res = await as(w.tokens.admin).post('/employees', { payType: 'salary', firstName: 'Kid', lastName: 'Young', homeHotelId: w.h1, birthDate: '2012-01-01', departmentIds: [w.d1] });
     expect(res.status).toBe(400);
     expect(res.body.error.details[0].field).toBe('birthDate');
   });
 
   it('creates a floating employee with hotels and departments', async () => {
-    const res = await as(w.tokens.regional).post('/employees', { payType: 'salary',
+    const res = await as(w.tokens.admin).post('/employees', { payType: 'salary',
       firstName: 'Maria', lastName: 'Garcia', email: 'mg@x.de', phone: '1', hourlyRate: 15.5, workWeekdays: [1, 2, 3, 4, 5], employeeNumber: 'P900',
       birthDate: '2010-03-04', hiredOn: '2026-09-01', employmentType: 'apprentice', attendanceRequired: true, homeHotelId: w.h1, hotelIds: [w.h1, w.h2], departmentIds: [w.d1, w.d4],
     });
@@ -96,10 +96,21 @@ describe('Phase 3: employees, assignments, holidays', () => {
       { id: w.h2, name: 'Trip Inn Munich', isHome: false },
     ]);
     expect(res.body.departments.map((d: any) => d.id).sort()).toEqual([w.d1, w.d4].sort());
-    const dupNumber = await as(w.tokens.regional).post('/employees', { payType: 'salary', firstName: 'X', lastName: 'Y', homeHotelId: w.h1, employeeNumber: 'P900' });
+    const dupNumber = await as(w.tokens.admin).post('/employees', { payType: 'salary', firstName: 'X', lastName: 'Y', homeHotelId: w.h1, employeeNumber: 'P900' });
     expect(dupNumber.status).toBe(409);
-    const wrongDept = await as(w.tokens.manager1).post('/employees', { payType: 'salary', firstName: 'X', lastName: 'Y', homeHotelId: w.h1, departmentIds: [w.d4] });
+    const wrongDept = await as(w.tokens.admin).post('/employees', { payType: 'salary', firstName: 'X', lastName: 'Y', homeHotelId: w.h1, departmentIds: [w.d4] });
     expect(wrongDept.status).toBe(400);
+  });
+
+  it('SPEC 1.10: only admins add or delete employees; managers edit', async () => {
+    const body = { payType: 'hourly', firstName: 'New', lastName: 'Hire', homeHotelId: w.h1, departmentIds: [w.d1] };
+    expect((await as(w.tokens.manager1).post('/employees', body)).status).toBe(403);
+    const created = await as(w.tokens.admin).post('/employees', body);
+    expect(created.status).toBe(201);
+    expect((await as(w.tokens.manager1).patch(`/employees/${created.body.id}`, { phone: '+49 1' })).status).toBe(200);
+    expect((await as(w.tokens.manager1).delete(`/employees/${created.body.id}`)).status).toBe(403);
+    expect((await as(w.tokens.admin).delete(`/employees/${created.body.id}`)).status).toBe(204);
+    expect((await as(w.tokens.manager1).get(`/employees/${created.body.id}`)).status).toBe(404);
   });
 
   it('#71 hotel 2 manager: reduced view of a floating employee, no master-data edits', async () => {

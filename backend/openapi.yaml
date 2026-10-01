@@ -2620,7 +2620,7 @@ paths:
       tags:
         - Employees
       summary: "E3: Create employee"
-      description: "Role: manager and up."
+      description: "Role: admin."
       security:
         - bearer: []
       requestBody:
@@ -2794,7 +2794,7 @@ paths:
       tags:
         - Employees
       summary: "E5: Soft-delete"
-      description: "Role: manager and up."
+      description: "Role: admin."
       security:
         - bearer: []
       parameters:
