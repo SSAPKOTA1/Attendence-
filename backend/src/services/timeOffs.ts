@@ -71,7 +71,8 @@ async function expand(db: Db, access: EmployeeAccess, input: Pick<TimeOffInput, 
     startHalfDay: input.startHalfDay,
     endHalfDay: input.endHalfDay,
     workWeekdays: access.employee.work_weekdays,
-    holidayName: (d) => holidayName(region, d, lang),
+    // employees without public holidays off work normally on holidays: those days count as absence days
+    holidayName: (d) => (access.employee.public_holidays_off ? holidayName(region, d, lang) : null),
   });
 }
 

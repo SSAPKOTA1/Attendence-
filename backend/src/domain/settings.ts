@@ -97,6 +97,7 @@ export const SettingsSchema = z
                 annualLeave: z.string().nullable().default(null),
                 sick: z.string().nullable().default(null),
                 school: z.string().nullable().default(null),
+                publicHoliday: z.string().nullable().default(null),
                 night: z.string().nullable().default(null),
                 saturday: z.string().nullable().default(null),
                 sunday: z.string().nullable().default(null),

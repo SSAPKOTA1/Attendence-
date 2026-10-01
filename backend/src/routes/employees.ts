@@ -33,6 +33,9 @@ const employeeBody = z.object({
   terminatedOn: zDate.nullable().optional(),
   employmentType: employmentType.optional(),
   attendanceRequired: z.boolean().optional(),
+  // owner decision: chosen when the employee is created (salaried → time account, hourly → paid per hour)
+  payType: z.enum(['salary', 'hourly']),
+  publicHolidaysOff: z.boolean().default(true),
   homeHotelId: z.number().int().positive(),
   hotelIds: z.array(z.number().int().positive()).optional(),
   departmentIds: z.array(z.number().int().positive()).optional(),
@@ -60,7 +63,7 @@ employeesRouter.post('/employees', requireRole('manager'), async (req, res) => {
 });
 
 employeesRouter.patch('/employees/:id', requireRole('manager'), async (req, res) => {
-  const body = parseBody(employeeBody.omit({ homeHotelId: true, hotelIds: true }).partial(), req);
+  const body = parseBody(employeeBody.omit({ homeHotelId: true, hotelIds: true }).extend({ publicHolidaysOff: z.boolean().optional() }).partial(), req);
   res.json(await withTransaction((db) => emp.updateEmployee(db, req.ctx!, req.params.id as string, body)));
 });
 

@@ -92,7 +92,7 @@ export async function dashboard(db: Db, ctx: AuthContext) {
       creditedHours: toHours(sumCredit(ms, me)),
       targetHours: targets.targetHoursPerMonth,
     },
-    timeAccount: { balanceHours: account.balanceHours },
+    timeAccount: { enabled: account.timeAccountEnabled, balanceHours: account.balanceHours },
     vacation: { year: vacation.year, remainingDays: vacation.remainingDays, pendingDays: vacation.pendingDays, usedDays: vacation.usedDays },
     pending: { timeOffs: pendingTimeOffs, wishes: pendingWishes, corrections: pendingCorrections, inquiriesAwaitingAnswer: inquiriesOpen },
     unread: { notifications: unread, inquiriesAnswered },

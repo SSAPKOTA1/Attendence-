@@ -13,8 +13,8 @@ import { isHoliday } from './holidays';
 import { audit } from './audit';
 
 export const PAYROLL_COLUMNS = [
-  'employeeNumber', 'lastName', 'firstName', 'employmentType', 'workedMinutes', 'plannedMinutes', 'creditedAnnualMinutes',
-  'creditedSickMinutes', 'creditedSchoolMinutes', 'absenceDaysAnnual', 'absenceDaysSick', 'absenceDaysUnpaid', 'nightMinutes',
+  'employeeNumber', 'lastName', 'firstName', 'employmentType', 'payType', 'workedMinutes', 'plannedMinutes', 'creditedAnnualMinutes',
+  'creditedSickMinutes', 'creditedSchoolMinutes', 'creditedPublicHolidayMinutes', 'absenceDaysAnnual', 'absenceDaysSick', 'absenceDaysUnpaid', 'nightMinutes',
   'saturdayMinutes', 'sundayMinutes', 'holidayMinutes', 'openOrReviewEntries', 'timeAccountDeltaMinutes',
 ];
 
@@ -24,11 +24,13 @@ export interface PayrollRow {
   lastName: string;
   firstName: string;
   employmentType: string;
+  payType: 'salary' | 'hourly';
   workedMinutes: number;
   plannedMinutes: number;
   creditedAnnualMinutes: number;
   creditedSickMinutes: number;
   creditedSchoolMinutes: number;
+  creditedPublicHolidayMinutes: number;
   absenceDaysAnnual: number;
   absenceDaysSick: number;
   absenceDaysUnpaid: number;
@@ -37,7 +39,8 @@ export interface PayrollRow {
   sundayMinutes: number;
   holidayMinutes: number;
   openOrReviewEntries: number;
-  timeAccountDeltaMinutes: number;
+  /** null for hourly workers (no time account) */
+  timeAccountDeltaMinutes: number | null;
 }
 
 /**
@@ -99,18 +102,20 @@ export async function payrollRows(db: Db, hotel: Hotel, month: string): Promise<
         )
       : [];
     const dayN = (type: string) => days.find((d) => d.type === type)?.n ?? 0;
-    const delta = isHome ? Math.round((await computeMonths(db, e.id, month, month))[0].deltaMinutes) : 0;
+    const delta = e.pay_type === 'hourly' ? null : isHome ? Math.round((await computeMonths(db, e.id, month, month))[0].deltaMinutes) : 0;
     out.push({
       employeeId: e.id,
       employeeNumber: e.employee_number,
       lastName: e.last_name,
       firstName: e.first_name,
       employmentType: e.employment_type,
+      payType: e.pay_type,
       workedMinutes: worked,
       plannedMinutes: planned,
       creditedAnnualMinutes: sumC('annual_leave'),
       creditedSickMinutes: sumC('sick_leave'),
       creditedSchoolMinutes: sumC('school'),
+      creditedPublicHolidayMinutes: sumC('public_holiday'),
       absenceDaysAnnual: dayN('annual_leave'),
       absenceDaysSick: dayN('sick_leave'),
       absenceDaysUnpaid: dayN('unpaid_leave'),
@@ -142,6 +147,7 @@ const WAGE_KEYS: { key: keyof Hotel['settings']['payroll']['datev']['wageTypes']
   { key: 'annualLeave', column: 'creditedAnnualMinutes', note: 'Urlaub' },
   { key: 'sick', column: 'creditedSickMinutes', note: 'Krank' },
   { key: 'school', column: 'creditedSchoolMinutes', note: 'Berufsschule' },
+  { key: 'publicHoliday', column: 'creditedPublicHolidayMinutes', note: 'Feiertagslohn' },
   { key: 'night', column: 'nightMinutes', note: 'Nacht' },
   { key: 'saturday', column: 'saturdayMinutes', note: 'Samstag' },
   { key: 'sunday', column: 'sundayMinutes', note: 'Sonntag' },

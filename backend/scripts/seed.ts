@@ -57,12 +57,12 @@ async function main() {
 
     const pins: { name: string; login: string; pin: string }[] = [];
     const employee = async (
-      first: string, last: string, number: string, depts: number[], opts: { email?: string; username?: string; birthDate?: string; type?: string; floating?: boolean },
+      first: string, last: string, number: string, depts: number[], opts: { email?: string; username?: string; birthDate?: string; type?: string; floating?: boolean; payType?: 'salary' | 'hourly'; holidaysOff?: boolean },
     ) => {
       const e = await one(
-        `INSERT INTO employees (company_id, first_name, last_name, email, hourly_rate, employee_number, birth_date, employment_type, hired_on)
-         VALUES ($1,$2,$3,$4,15.50,$5,$6,$7,'2025-01-01') RETURNING id`,
-        [company.id, first, last, opts.email ?? null, number, opts.birthDate ?? null, opts.type ?? 'full_time'],
+        `INSERT INTO employees (company_id, first_name, last_name, email, hourly_rate, employee_number, birth_date, employment_type, hired_on, pay_type, public_holidays_off)
+         VALUES ($1,$2,$3,$4,15.50,$5,$6,$7,'2025-01-01',$8,$9) RETURNING id`,
+        [company.id, first, last, opts.email ?? null, number, opts.birthDate ?? null, opts.type ?? 'full_time', opts.payType ?? 'salary', opts.holidaysOff ?? true],
       );
       await db.query('INSERT INTO employee_hotels (employee_id, hotel_id, company_id, is_home, assigned_on) VALUES ($1,$2,$3,true,$4)', [e.id, fra.id, company.id, '2025-01-01']);
       if (opts.floating) await db.query('INSERT INTO employee_hotels (employee_id, hotel_id, company_id, is_home, assigned_on) VALUES ($1,$2,$3,false,$4)', [e.id, ber.id, company.id, '2025-01-01']);
@@ -78,8 +78,8 @@ async function main() {
     await employee('Jonas', 'Schmidt', 'P101', [frontDesk, housekeeping], { email: 'jonas@tripinn.example' });
     await employee('Flo', 'Weber', 'P102', [frontDesk, berFront], { email: 'flo@tripinn.example', floating: true });
     await employee('Mia', 'Klein', 'P103', [breakfast], { email: 'mia@tripinn.example', birthDate: new Date(Date.now() - 17.3 * 365.25 * 86_400_000).toISOString().slice(0, 10), type: 'apprentice' });
-    await employee('Kai', 'Novak', 'P104', [housekeeping], { username: 'kai.novak' });
-    await employee('Lena', 'Brandt', 'P105', [breakfast, frontDesk], { email: 'lena@tripinn.example', type: 'part_time' });
+    await employee('Kai', 'Novak', 'P104', [housekeeping], { username: 'kai.novak', payType: 'hourly', holidaysOff: false });
+    await employee('Lena', 'Brandt', 'P105', [breakfast, frontDesk], { email: 'lena@tripinn.example', type: 'part_time', payType: 'hourly' });
 
     const deviceToken = randomToken(32);
     await db.query(`INSERT INTO kiosk_devices (hotel_id, name, token_hash) VALUES ($1,'Front desk tablet (demo)',$2)`, [fra.id, sha256(deviceToken)]);

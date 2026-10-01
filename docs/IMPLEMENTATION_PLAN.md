@@ -101,5 +101,6 @@ Known limits / follow-ups:
 - R19 "suggested username" is left to the client (the API accepts any valid username and reports collisions as `409 DUPLICATE_RESOURCE`).
 - Rate limiting is in-process (per instance); put a shared limiter (e.g. Redis or the reverse proxy) in front when running several instances.
 - Night/Saturday/Sunday/holiday minutes: the break is deducted automatically and proportionally (owner decision, SPEC 1.7). If the collective agreement places the break at a fixed time instead, only `domain/supplements.ts` changes.
+- Pay type and public holidays per employee (SPEC 1.8): migration `0003_pay_type_holidays`; existing employees default to `salary` / holidays off.
 - LODAS is the default DATEV product with pre-filled templates; consultant/client numbers and wage types still come from the payroll office.
 - Load test, security review and backup/restore drill from Phase 10 are operational tasks outside the code base.

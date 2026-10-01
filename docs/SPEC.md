@@ -76,6 +76,12 @@ Clock-in on a **shared hotel tablet** with **name + PIN only**; **automatic dedu
 | Supplements | New **Saturday** supplement (`saturdayMinutes`, wage type `saturday`). The unpaid break is **deducted automatically** from night, Saturday, Sunday and holiday minutes, proportionally (worked ÷ gross) because the break time of day is not recorded |
 | Shift design | Shift templates are designed in the app (`POST/PATCH/DELETE /shifts`) by admins and managers; the seed shifts are examples only |
 
+### 1.8 Salaried vs hourly, public holidays per employee (owner decisions)
+| Topic | Rule |
+|---|---|
+| `payType` (`salary` \| `hourly`) | **Required when an employee is created**, editable by home-hotel managers. Only `salary` employees have a time account (Arbeitszeitkonto: target, monthly delta, balance). For `hourly` employees `GET /employees/:id/time-account` returns worked/credited hours with `targetHours`, `deltaHours`, `balanceHours` = `null` (`timeAccountEnabled: false`); payroll `timeAccountDeltaMinutes` is `null` |
+| `publicHolidaysOff` (boolean, default `true`) | `true`: public holidays of the home hotel region on a work weekday are paid days off: they are skipped when counting absence days, credited like a normal working day (`type: public_holiday`, payroll column `creditedPublicHolidayMinutes`, DATEV wage type `publicHoliday`), and rostering a shift on that day gives the warning `public_holiday_off`. If the employee works that day (roster shift or time entry) there is no holiday credit; the worked time gets the holiday supplement. `false`: holidays are normal working days (counted in absences, no credit, no warning) |
+
 ---
 
 ## 2. Decisions
@@ -737,8 +743,8 @@ GET /schedules/candidates?hotelId=1&date=2026-10-12&shiftId=3
 **Payroll export (AT10/AT11)**
 ```
 GET /hotels/1/payroll-export?month=2026-09&format=csv|json|datev
-columns: employeeNumber, lastName, firstName, employmentType, workedMinutes, plannedMinutes, creditedAnnualMinutes, creditedSickMinutes,
-         creditedSchoolMinutes, absenceDaysAnnual, absenceDaysSick, absenceDaysUnpaid, nightMinutes, saturdayMinutes, sundayMinutes, holidayMinutes,
+columns: employeeNumber, lastName, firstName, employmentType, payType, workedMinutes, plannedMinutes, creditedAnnualMinutes, creditedSickMinutes,
+         creditedSchoolMinutes, creditedPublicHolidayMinutes, absenceDaysAnnual, absenceDaysSick, absenceDaysUnpaid, nightMinutes, saturdayMinutes, sundayMinutes, holidayMinutes,
          openOrReviewEntries, timeAccountDeltaMinutes
 GET /attendance/export?hotelId&from&to&format=csv        one line per time entry: date, employeeNumber, shift, clockIn, clockOut, breakMinutes, workedMinutes, anomalies, status
 ```
@@ -954,7 +960,7 @@ Rule: business rules live in `services/` and `domain/`; controllers hold no logi
 
 ## 12. Naming reference (JSON, camelCase)
 
-- **Employee:** id, employeeNumber, firstName, lastName, email, phone, hourlyRate, status, employmentType, birthDate, hiredOn, attendanceRequired, workWeekdays[1–7], terminatedOn, homeHotelId, hotels[{id,name,isHome}], departments[{id,name,color,hotelId}], hotelIds[] and departmentIds[] (input)
+- **Employee:** id, employeeNumber, firstName, lastName, email, phone, hourlyRate, payType (`salary`|`hourly`), publicHolidaysOff, status, employmentType, birthDate, hiredOn, attendanceRequired, workWeekdays[1–7], terminatedOn, homeHotelId, hotels[{id,name,isHome}], departments[{id,name,color,hotelId}], hotelIds[] and departmentIds[] (input)
 - **Shift:** id, hotelId, departmentId, name, startTime, endTime, durationHours, breakDurationMinutes, paidHours, warnings[]
 - **Work targets:** targetHoursPerWeek, minHoursPerWeek, maxHoursPerWeek, targetHoursPerMonth, minHoursPerMonth, maxHoursPerMonth, openingBalanceHours, balanceStartDate
 - **Allowance:** year, vacationDaysPerYear, carriedOverDays, carryOverExpiresOn, usedDays, pendingDays, remainingDays

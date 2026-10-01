@@ -243,7 +243,7 @@ const doc = {
         type: 'object',
         properties: {
           id: { type: 'integer' }, employeeNumber: { type: ['string', 'null'] }, firstName: { type: 'string' }, lastName: { type: 'string' }, email: { type: ['string', 'null'] }, phone: { type: ['string', 'null'] },
-          hourlyRate: { type: ['number', 'null'] }, status: { enum: ['active', 'on_leave', 'terminated'] }, employmentType: { type: 'string' }, birthDate: { type: ['string', 'null'] }, hiredOn: { type: ['string', 'null'] },
+          hourlyRate: { type: ['number', 'null'] }, payType: { enum: ['salary', 'hourly'], description: 'required on create' }, publicHolidaysOff: { type: 'boolean', default: true }, status: { enum: ['active', 'on_leave', 'terminated'] }, employmentType: { type: 'string' }, birthDate: { type: ['string', 'null'] }, hiredOn: { type: ['string', 'null'] },
           attendanceRequired: { type: 'boolean' }, workWeekdays: { type: 'array', items: { type: 'integer', minimum: 1, maximum: 7 } }, terminatedOn: { type: ['string', 'null'] }, homeHotelId: { type: 'integer' },
           hotels: { type: 'array', items: { type: 'object', properties: { id: { type: 'integer' }, name: { type: 'string' }, isHome: { type: 'boolean' } } } },
           departments: { type: 'array', items: { type: 'object', properties: { id: { type: 'integer' }, name: { type: 'string' }, color: { type: ['string', 'null'] }, hotelId: { type: 'integer' } } } },

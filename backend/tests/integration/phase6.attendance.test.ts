@@ -365,18 +365,20 @@ describe('Phase 6: kiosk and attendance', () => {
     expect(res.body.warnings).toEqual(['period_not_locked']);
     expect(res.body.data).toEqual([
       {
-        employeeId: w.maria, employeeNumber: 'P100', lastName: 'Garcia', firstName: 'Maria', employmentType: 'full_time',
+        employeeId: w.maria, employeeNumber: 'P100', lastName: 'Garcia', firstName: 'Maria', employmentType: 'full_time', payType: 'salary',
         workedMinutes: 1770, plannedMinutes: 450, creditedAnnualMinutes: 960, creditedSickMinutes: 480, creditedSchoolMinutes: 0,
+        // paid public holidays 14 and 25 May (1 May was worked → no holiday pay, holiday supplement instead)
+        creditedPublicHolidayMinutes: 960,
         absenceDaysAnnual: 2, absenceDaysSick: 1, absenceDaysUnpaid: 0,
         // break deducted proportionally: night 420 × 420/480 = 367.5 → 368; the other supplements 480 − 30 = 450
         nightMinutes: 368, saturdayMinutes: 450, sundayMinutes: 450, holidayMinutes: 450,
-        openOrReviewEntries: 1, timeAccountDeltaMinutes: -6390,
+        openOrReviewEntries: 1, timeAccountDeltaMinutes: -5430,
       },
     ]);
     const csv = await M1().get(`/hotels/${w.h1}/payroll-export?month=2026-05&format=csv`);
     expect(csv.status).toBe(200);
     expect(csv.headers['content-type']).toMatch(/text\/csv/);
-    expect(csv.text.split('\r\n')[0]).toBe('employeeNumber,lastName,firstName,employmentType,workedMinutes,plannedMinutes,creditedAnnualMinutes,creditedSickMinutes,creditedSchoolMinutes,absenceDaysAnnual,absenceDaysSick,absenceDaysUnpaid,nightMinutes,saturdayMinutes,sundayMinutes,holidayMinutes,openOrReviewEntries,timeAccountDeltaMinutes');
+    expect(csv.text.split('\r\n')[0]).toBe('employeeNumber,lastName,firstName,employmentType,payType,workedMinutes,plannedMinutes,creditedAnnualMinutes,creditedSickMinutes,creditedSchoolMinutes,creditedPublicHolidayMinutes,absenceDaysAnnual,absenceDaysSick,absenceDaysUnpaid,nightMinutes,saturdayMinutes,sundayMinutes,holidayMinutes,openOrReviewEntries,timeAccountDeltaMinutes');
     const att = await M1().get(`/attendance/export?hotelId=${w.h1}&from=2026-05-01&to=2026-05-31&format=csv`);
     expect(att.status).toBe(200);
     expect(att.text.trim().split('\r\n')).toHaveLength(6);
@@ -407,7 +409,7 @@ describe('Phase 6: kiosk and attendance', () => {
         headerTemplate: '[Allgemein]\n; Export für LODAS (Testmandant)\nZiel=LODAS\nVersion_SST=1.0\nBeraterNr={consultantNumber}\nMandantenNr={clientNumber}\nAbrechnungszeitraum={month}',
         recordDescriptionTemplate: '[Satzbeschreibung]\n10;u_lod_bwd_buchung_standard;pnr#bwd;abrechnung_zeitraum#bwd;buchungswert#bwd;buchungsschluessel#bwd;la_eigene#bwd;;;bs_wert_butab#bwd;\n[Bewegungsdaten]',
         lineTemplate: '10;{pnr};{date};{value};{key};{wageType};;;"{note}";',
-        wageTypes: { worked: '100', annualLeave: '200', sick: '300', school: '400', night: null, saturday: '505', sunday: '510', holiday: '520' },
+        wageTypes: { worked: '100', annualLeave: '200', sick: '300', school: '400', publicHoliday: '530', night: null, saturday: '505', sunday: '510', holiday: '520' },
       };
     });
     const missingNight = await M1().get(`/hotels/${w.h1}/payroll-export?month=2026-05&format=datev`);

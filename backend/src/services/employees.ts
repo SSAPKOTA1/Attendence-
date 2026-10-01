@@ -21,6 +21,8 @@ export interface EmployeeInput {
   terminatedOn?: string | null;
   employmentType?: string;
   attendanceRequired?: boolean;
+  payType?: 'salary' | 'hourly';
+  publicHolidaysOff?: boolean;
   homeHotelId: number;
   hotelIds?: number[];
   departmentIds?: number[];
@@ -59,6 +61,7 @@ export async function employeeDto(db: Db, e: any, opts: { full: boolean; showBir
     employmentType: e.employment_type,
     hiredOn: e.hired_on,
     attendanceRequired: e.attendance_required,
+    publicHolidaysOff: e.public_holidays_off,
     workWeekdays: e.work_weekdays,
     terminatedOn: e.terminated_on,
     homeHotelId: home ? home.hotel_id : null,
@@ -70,6 +73,7 @@ export async function employeeDto(db: Db, e: any, opts: { full: boolean; showBir
     dto.email = e.email;
     dto.phone = e.phone;
     dto.hourlyRate = e.hourly_rate;
+    dto.payType = e.pay_type;
     dto.anonymizedAt = e.anonymized_at;
   }
   if (opts.showBirthDate ?? opts.full) dto.birthDate = e.birth_date;
@@ -146,11 +150,11 @@ export async function createEmployee(db: Db, ctx: AuthContext, input: EmployeeIn
   const e = await maybeOne(
     db,
     `INSERT INTO employees (company_id, first_name, last_name, email, phone, hourly_rate, status, work_weekdays, terminated_on,
-                            employee_number, birth_date, hired_on, employment_type, attendance_required)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+                            employee_number, birth_date, hired_on, employment_type, attendance_required, pay_type, public_holidays_off)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
     [ctx.companyId, input.firstName, input.lastName, input.email ?? null, input.phone ?? null, input.hourlyRate ?? null, status,
       input.workWeekdays ?? [1, 2, 3, 4, 5], terminatedOn, input.employeeNumber ?? null, input.birthDate ?? null, input.hiredOn ?? null,
-      input.employmentType ?? 'full_time', input.attendanceRequired ?? true],
+      input.employmentType ?? 'full_time', input.attendanceRequired ?? true, input.payType ?? 'salary', input.publicHolidaysOff ?? true],
   );
   const assignedOn = input.hiredOn && input.hiredOn < today() ? input.hiredOn : today();
   for (const h of hotelIds) {
@@ -163,7 +167,7 @@ export async function createEmployee(db: Db, ctx: AuthContext, input: EmployeeIn
   await db.query('INSERT INTO employee_work_targets (employee_id) VALUES ($1)', [e.id]);
   await audit(db, ctx, {
     action: 'employee.create', entityType: 'employee', entityId: e.id, hotelId: input.homeHotelId,
-    after: { status, workWeekdays: e.work_weekdays, employmentType: e.employment_type, hotelIds, departmentIds },
+    after: { status, workWeekdays: e.work_weekdays, employmentType: e.employment_type, payType: e.pay_type, publicHolidaysOff: e.public_holidays_off, hotelIds, departmentIds },
   });
   return employeeDto(db, e, { full: true });
 }
@@ -201,11 +205,13 @@ export async function updateEmployee(db: Db, ctx: AuthContext, id: string | numb
   const updated = await maybeOne(
     db,
     `UPDATE employees SET first_name=$2, last_name=$3, email=$4, phone=$5, hourly_rate=$6, status=$7, work_weekdays=$8,
-            terminated_on=$9, employee_number=$10, birth_date=$11, hired_on=$12, employment_type=$13, attendance_required=$14
+            terminated_on=$9, employee_number=$10, birth_date=$11, hired_on=$12, employment_type=$13, attendance_required=$14,
+            pay_type=$15, public_holidays_off=$16
       WHERE id = $1 RETURNING *`,
     [e.id, pick('firstName', 'first_name'), pick('lastName', 'last_name'), pick('email', 'email'), pick('phone', 'phone'),
       pick('hourlyRate', 'hourly_rate'), status, pick('workWeekdays', 'work_weekdays'), terminatedOn, pick('employeeNumber', 'employee_number'),
-      pick('birthDate', 'birth_date'), pick('hiredOn', 'hired_on'), pick('employmentType', 'employment_type'), pick('attendanceRequired', 'attendance_required')],
+      pick('birthDate', 'birth_date'), pick('hiredOn', 'hired_on'), pick('employmentType', 'employment_type'), pick('attendanceRequired', 'attendance_required'),
+      pick('payType', 'pay_type'), pick('publicHolidaysOff', 'public_holidays_off')],
   );
   if (input.departmentIds) {
     await db.query('DELETE FROM employee_departments WHERE employee_id = $1', [e.id]);
@@ -216,8 +222,8 @@ export async function updateEmployee(db: Db, ctx: AuthContext, id: string | numb
   }
   await audit(db, ctx, {
     action: 'employee.update', entityType: 'employee', entityId: e.id, hotelId: access.homeHotelId,
-    before: { status: e.status, workWeekdays: e.work_weekdays, employmentType: e.employment_type, terminatedOn: e.terminated_on },
-    after: { status: updated.status, workWeekdays: updated.work_weekdays, employmentType: updated.employment_type, terminatedOn: updated.terminated_on, changed: Object.keys(input) },
+    before: { status: e.status, workWeekdays: e.work_weekdays, employmentType: e.employment_type, terminatedOn: e.terminated_on, payType: e.pay_type, publicHolidaysOff: e.public_holidays_off },
+    after: { status: updated.status, workWeekdays: updated.work_weekdays, employmentType: updated.employment_type, terminatedOn: updated.terminated_on, payType: updated.pay_type, publicHolidaysOff: updated.public_holidays_off, changed: Object.keys(input) },
   });
   return employeeDto(db, updated, { full: true });
 }

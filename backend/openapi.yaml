@@ -176,6 +176,14 @@ components:
           type:
             - number
             - "null"
+        payType:
+          enum:
+            - salary
+            - hourly
+          description: required on create
+        publicHolidaysOff:
+          type: boolean
+          default: true
         status:
           enum:
             - active

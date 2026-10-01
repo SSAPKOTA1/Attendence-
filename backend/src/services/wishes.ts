@@ -160,7 +160,7 @@ export async function createLeaveWish(
   let leaveDays = input.leaveDays;
   if (leaveDays === undefined) {
     const region = home?.holidayRegion ?? 'DE-HE';
-    leaveDays = countTimeOffDays({ startDate: input.startDate, endDate: input.endDate, workWeekdays: access.employee.work_weekdays, holidayName: (d) => holidayName(region, d) }).total;
+    leaveDays = countTimeOffDays({ startDate: input.startDate, endDate: input.endDate, workWeekdays: access.employee.work_weekdays, holidayName: (d) => (access.employee.public_holidays_off ? holidayName(region, d) : null) }).total;
     if (leaveDays === 0) throw new AppError('NO_WORKING_DAYS_IN_RANGE');
   }
   let r;

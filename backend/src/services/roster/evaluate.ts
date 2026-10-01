@@ -254,6 +254,20 @@ export async function evaluateEntry(
     periodWarnings('month', monthMinutes, targets.targetHoursPerMonth, targets.maxHoursPerMonth, targets.minHoursPerMonth);
   }
 
+  // ---- public holiday off (SPEC 1.8) ----
+  if (shift && employee.public_holidays_off) {
+    const home = await maybeOne(db, `SELECT h.holiday_region FROM employee_hotels eh JOIN hotels h ON h.id = eh.hotel_id WHERE eh.employee_id = $1 AND eh.is_home`, [employee.id]);
+    const name = holidayName(home?.holiday_region ?? hotel.holidayRegion, date);
+    if (name) {
+      warnings.push({
+        type: 'public_holiday_off',
+        severity: 'warning',
+        message: t(lang, `${name}: this employee normally has public holidays off`, `${name}: Diese Person hat an Feiertagen normalerweise frei`),
+        holidayName: name,
+      });
+    }
+  }
+
   // ---- pending absence, wishes ----
   const pending = await maybeOne(
     db,
