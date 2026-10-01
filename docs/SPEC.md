@@ -86,6 +86,10 @@ Clock-in on a **shared hotel tablet** with **name + PIN only**; **automatic dedu
 | Decision | `PATCH /attendance/:id/approval { status: approved | rejected, note }` (AT12): managers of the entry's hotel and admins. The entry must be closed (a forgotten clock-out is first closed by a correction). Rejection needs a note. Decisions can be revised (approved ⇄ rejected). Nobody decides their own hours except an admin. The payroll period lock applies (`423 PERIOD_LOCKED`, admin with a note overrides, audited) |
 | Notifications | `time_approval_requested` to the hotel's managers when the hours become final (clock-out); `time_approval_decided` to the employee (ids only, never the note); live board `awaitingApproval` |
 
+
+### 1.13 Forgotten clock-out on a planned shift (owner decision)
+If an employee forgets to clock out of a **planned** shift, the hourly job closes the entry once `attendance.autoCloseAfterPlannedEndHours` (default 5, `null` = off) have passed after the planned shift end: `clockOutAt` = planned end, `breakMinutes` = the shift's scheduled break (capped below the gross time), `sourceOut` = `system`, anomaly `auto_closed_planned_hours`, managers are notified (`needs_review_entry`, `anomaly: auto_closed`) and the audit log records `attendance.auto_close`. The credited hours run from the real clock-in to the planned end. Not auto-closed: unplanned entries (no planned hours exist; they become `needs_review` after `needsReviewAfterHours`), entries clocked in after the planned end, and entries whose day is in a locked period. A manager can still correct the entry (AT corrections). This replaces the "never auto-closed" part of R13.7 for planned shifts.
+
 ### 1.11 Data-integrity rules found by the audit
 | Rule | Behaviour |
 |---|---|
@@ -190,7 +194,7 @@ Creating, editing and deleting shift templates (`S2`–`S4`) is restricted to ad
   "portal":     { "planVisibility": "own_departments", "nameFormat": "first_last_initial" },
   "wishes":     { "minLeadDays": null },
   "attendance": { "breakMode": "auto", "earlyClockInMinutes": 30, "lateToleranceMinutes": 5,
-                  "overtimeToleranceMinutes": 15, "needsReviewAfterHours": 14,
+                  "overtimeToleranceMinutes": 15, "needsReviewAfterHours": 14, "autoCloseAfterPlannedEndHours": 5,
                   "kioskAllowedIps": [], "pinMaxAttempts": 5, "pinLockMinutes": 15 },
   "absence":    { "sickNoteRequiredFromDay": 4, "sickCreditMaxDays": 42 },
   "payroll":    { "nightFrom": "23:00", "nightTo": "06:00",
@@ -334,7 +338,7 @@ Creating annual leave needing more than `remaining` in any affected year → `42
 
 **R13.6 Breaks.** `auto` (default): at `clock_out`, `breakMinutes` = the shift's scheduled break if gross time ≥ 6 h, else 0; unscheduled work uses `legal.breakRules` by gross time. `recorded`: sum of recorded breaks; missing/short → `missing_break`. On a split day the test uses the day's total working time and counts gaps of at least 15 minutes between parts as break time; minors follow R18.
 
-**R13.7 Forgotten clock-out.** An hourly job sets entries open longer than `needsReviewAfterHours` to `needs_review`. They are never auto-closed with invented times; a manager closes them through a correction.
+**R13.7 Forgotten clock-out.** An hourly job sets entries open longer than `needsReviewAfterHours` to `needs_review`. Unplanned entries are never auto-closed with invented times; a manager closes them through a correction. Planned-shift entries: see 1.13.
 
 **R13.8 Corrections.** Entries are never edited in place. An employee (web login) **requests** a correction with a mandatory reason; a manager approves/rejects. A manager's own change is recorded as a correction row that is created already `approved` (reason mandatory). Approval snapshots the original values on the correction row and then updates the entry; the audit log records both. A manager can also add a missed day manually (`POST /attendance`, source `manager`, reason mandatory).
 
@@ -996,7 +1000,7 @@ Rule: business rules live in `services/` and `domain/`; controllers hold no logi
 - **Time-off:** id, employeeId, type, startDate, endDate, startHalfDay, endHalfDay, timeOffDays (computed), reason, status, medicalCertificateReceived, decidedById, decidedAt, conflicts[]
 - **Roster entry:** id, status (`draft`|`published`), entryType (`shift`|`off`), employee, shift, offLabel, date, paidHoursAssigned, currentWeekHours, currentMonthHours, weeklyTarget, monthlyTarget, restPeriodHours, warnings[], overrideReason, publishedAt
 - **Warning/anomaly:** type, severity (`warning`|`info`), message, plus context
-- **Time entry:** id, employeeId, scheduleId, status (`open`|`closed`|`needs_review`), clockInAt, clockOutAt, breakMinutes, workedMinutes, sourceIn, sourceOut, anomalies[], note, corrections[]
+- **Time entry:** id, employeeId, scheduleId, status (`open`|`closed`|`needs_review`), clockInAt, clockOutAt, breakMinutes, workedMinutes, sourceIn, sourceOut (`kiosk`|`manager`|`system`), anomalies[], note, corrections[]
 - **Correction:** id, timeEntryId, proposedClockInAt, proposedClockOutAt, proposedBreakMinutes, reason, status, decisionNote
 - **Kiosk device:** id, name, status (`active`|`revoked`), lastSeenAt
 - **Shift wish:** id, employeeId, date, shiftId|null, kind (`prefer`|`avoid`), priority (1 high–3 low), reason, status, decisionNote

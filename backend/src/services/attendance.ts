@@ -443,6 +443,50 @@ export async function setLock(db: Db, ctx: AuthContext, hotelId: number, lockedU
   return { hotelId, lockedUntil };
 }
 
+/**
+ * SPEC 1.13: an entry linked to a planned shift that is still open `autoCloseAfterPlannedEndHours` (default 5) after the
+ * planned end is closed with the planned end time and the shift's scheduled break (source_out 'system').
+ * Unplanned entries, entries in a locked period and entries clocked in after the planned end are left to markNeedsReview.
+ */
+export async function autoCloseForgottenClockOuts(db: Db): Promise<number> {
+  const hotels = await rows(db, 'SELECT * FROM hotels WHERE deleted_at IS NULL');
+  let total = 0;
+  const t = now();
+  for (const h of hotels) {
+    const hotel = await loadHotel(db, h.id);
+    const afterH = hotel.settings.attendance.autoCloseAfterPlannedEndHours;
+    if (!afterH) continue;
+    const open = await rows(
+      db,
+      `SELECT te.id, te.employee_id, te.clock_in_at, te.approval_status, te.anomalies, sc.date, sh.start_time, sh.end_time, sh.break_duration_minutes
+         FROM time_entries te JOIN schedules sc ON sc.id = te.schedule_id JOIN shifts sh ON sh.id = sc.shift_id
+        WHERE te.hotel_id = $1 AND te.status IN ('open','needs_review') AND te.clock_out_at IS NULL`,
+      [h.id],
+    );
+    for (const e of open) {
+      const end = shiftInstants(e.date, e.start_time, e.end_time, hotel.timezone).end;
+      if (t.getTime() < end.getTime() + afterH * 3_600_000) continue;
+      const inAt = new Date(e.clock_in_at);
+      if (inAt >= end) continue;
+      if (hotel.attendanceLockedUntil && localDate(end, hotel.timezone) <= hotel.attendanceLockedUntil) continue;
+      const gross = Math.floor((end.getTime() - inAt.getTime()) / 60_000);
+      const brk = Math.max(0, Math.min(e.break_duration_minutes, gross - 1));
+      const anomalies = [...(e.anomalies ?? []), { type: 'auto_closed_planned_hours', plannedEnd: end.toISOString() }];
+      const upd = await rows(
+        db,
+        `UPDATE time_entries SET clock_out_at = $2, break_minutes = $3, status = 'closed', source_out = 'system', anomalies = $4
+          WHERE id = $1 AND status IN ('open','needs_review') AND clock_out_at IS NULL RETURNING id`,
+        [e.id, end, brk, JSON.stringify(anomalies)],
+      );
+      if (upd.length === 0) continue;
+      total++;
+      await notify(db, { userIds: await managerIdsOfHotel(db, h.id), kind: 'needs_review_entry', params: { timeEntryId: e.id, employeeId: e.employee_id, anomaly: 'auto_closed' }, entityType: 'time_entry', entityId: e.id });
+      await audit(db, null, { action: 'attendance.auto_close', entityType: 'time_entry', entityId: e.id, hotelId: h.id, companyId: h.company_id, meta: { clockOutAt: end.toISOString(), breakMinutes: brk } });
+    }
+  }
+  return total;
+}
+
 /** R13.7 job: entries open longer than needsReviewAfterHours become needs_review (never auto-closed). */
 export async function markNeedsReview(db: Db): Promise<number> {
   const hotels = await rows(db, 'SELECT * FROM hotels WHERE deleted_at IS NULL');

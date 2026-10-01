@@ -66,6 +66,7 @@ export const SettingsSchema = z
         lateToleranceMinutes: z.number().int().min(0).default(5),
         overtimeToleranceMinutes: z.number().int().min(0).default(15),
         needsReviewAfterHours: z.number().positive().default(14),
+        autoCloseAfterPlannedEndHours: z.number().positive().nullable().default(5),
         kioskAllowedIps: z.array(z.string()).default([]),
         pinMaxAttempts: z.number().int().min(1).default(5),
         pinLockMinutes: z.number().int().min(1).default(15),

@@ -93,7 +93,7 @@ endpoint table (all 121 endpoints × anonymous/staff/manager/admin), randomized 
 implementations (JS vs database trigger, JS vs SQL time arithmetic, per-minute supplements vs a naive reference),
 concurrency races, a load test and a simulated production image. Defects found and fixed are listed in
 SPEC 1.11 and `docs/SECURITY_REVIEW.md` (second pass). Follow-up feature: unplanned clock-in needs a reason and a
-supervisor's approval before the hours count (SPEC 1.12, migration `0004`); 497 tests pass.
+supervisor's approval before the hours count (SPEC 1.12, migration `0004`); forgotten clock-out on a planned shift is auto-credited with the planned hours after 5 h (SPEC 1.13, migration `0005`).
 
 ## 6. Result (this build)
 
