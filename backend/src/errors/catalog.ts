@@ -31,6 +31,7 @@ export const ERROR_CATALOG = {
   MINOR_PROTECTION_VIOLATION: { status: 422, en: 'Youth employment protection rules are violated.', de: 'Regeln des Jugendarbeitsschutzes werden verletzt.' },
   LEAVE_BLACKOUT: { status: 422, en: 'Leave is blocked in this period.', de: 'In diesem Zeitraum ist Urlaub gesperrt.' },
   WISH_DEADLINE_PASSED: { status: 422, en: 'Wishes for this date are closed.', de: 'Wünsche für dieses Datum sind nicht mehr möglich.' },
+  UNPLANNED_REASON_REQUIRED: { status: 422, en: 'Clocking in without a planned shift needs a reason.', de: 'Das Einstempeln ohne geplante Schicht erfordert eine Begründung.' },
   OVERRIDE_REASON_REQUIRED: { status: 422, en: 'A written reason is required to save this.', de: 'Zum Speichern ist eine schriftliche Begründung nötig.' },
   PAYROLL_MAPPING_INCOMPLETE: { status: 422, en: 'The DATEV mapping is incomplete.', de: 'Die DATEV-Zuordnung ist unvollständig.' },
   EMPLOYEE_NOT_ASSIGNED_TO_HOTEL: { status: 422, en: 'The employee is not assigned to this hotel on that date.', de: 'Die Person ist an diesem Datum nicht diesem Hotel zugeordnet.' },

@@ -7,6 +7,8 @@ import { setEtag } from '../middleware/etag';
 import * as emp from '../services/employees';
 import { listHolidays } from '../services/holidays';
 import { loadHotel, resolveHotelId } from '../services/access';
+import { now } from '../clock';
+import { todayIn } from '../domain/dates';
 import { paged, parseBody, parseQuery, zDate, zOptId, zPaging } from '../validators/common';
 
 export const employeesRouter = Router();
@@ -36,6 +38,21 @@ const employeeBody = z.object({
   // owner decision: chosen when the employee is created (salaried → time account, hourly → paid per hour)
   payType: z.enum(['salary', 'hourly']),
   publicHolidaysOff: z.boolean().default(true),
+  removeFutureEntries: z.boolean().optional(),
+  // onboarding balance (SPEC 1.14); year defaults to the current year
+  vacation: z
+    .object({
+      year: z.number().int().min(2000).max(2100).optional(),
+      vacationDaysPerYear: z.number().min(0).max(366),
+      carriedOverDays: z.number().min(0).max(366).default(0),
+      remainingThisYearDays: z.number().min(0).max(366).optional(),
+      carryOverExpiresOn: zDate.nullable().optional(),
+    })
+    .refine((v) => v.remainingThisYearDays === undefined || v.remainingThisYearDays <= v.vacationDaysPerYear, {
+      message: 'remainingThisYearDays cannot exceed vacationDaysPerYear',
+      path: ['remainingThisYearDays'],
+    })
+    .optional(),
   homeHotelId: z.number().int().positive(),
   hotelIds: z.array(z.number().int().positive()).optional(),
   departmentIds: z.array(z.number().int().positive()).optional(),
@@ -64,7 +81,7 @@ employeesRouter.post('/employees', requireRole('admin'), async (req, res) => {
 });
 
 employeesRouter.patch('/employees/:id', requireRole('manager'), async (req, res) => {
-  const body = parseBody(employeeBody.omit({ homeHotelId: true, hotelIds: true }).extend({ publicHolidaysOff: z.boolean().optional() }).partial(), req);
+  const body = parseBody(employeeBody.omit({ homeHotelId: true, hotelIds: true, vacation: true }).extend({ publicHolidaysOff: z.boolean().optional() }).partial(), req);
   res.json(await withTransaction((db) => emp.updateEmployee(db, req.ctx!, req.params.id as string, body)));
 });
 
@@ -111,6 +128,6 @@ employeesRouter.get('/public-holidays', async (req, res) => {
   const q = parseQuery(z.object({ hotelId: zOptId, year: z.coerce.number().int().min(2000).max(2100).optional() }), req);
   const hotelId = resolveHotelId(req.ctx!, q.hotelId);
   const hotel = await loadHotel(getPool(), hotelId);
-  const year = q.year ?? new Date().getUTCFullYear();
+  const year = q.year ?? Number(todayIn(hotel.timezone, now()).slice(0, 4));
   res.json({ data: listHolidays(hotel.holidayRegion, year, req.ctx!.lang) });
 });

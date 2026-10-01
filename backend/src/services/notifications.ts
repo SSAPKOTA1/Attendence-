@@ -3,7 +3,7 @@ import { Db, rows } from '../db/pool';
 export const NOTIFICATION_KINDS = [
   'roster_published', 'roster_entry_changed', 'roster_entry_removed', 'absence_decided', 'wish_decided',
   'correction_decided', 'inquiry_reply', 'inquiry_new', 'absence_requested', 'wish_submitted',
-  'correction_requested', 'needs_review_entry', 'sick_reported',
+  'correction_requested', 'needs_review_entry', 'sick_reported', 'time_approval_requested', 'time_approval_decided',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
@@ -22,6 +22,8 @@ export const EMAIL_DEFAULTS: Record<NotificationKind, boolean> = {
   correction_requested: false,
   needs_review_entry: false,
   sick_reported: true,
+  time_approval_requested: false,
+  time_approval_decided: true,
 };
 
 export interface NotifyInput {

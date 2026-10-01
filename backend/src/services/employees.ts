@@ -6,6 +6,7 @@ import { now } from '../clock';
 import { audit } from './audit';
 import { getEmployeeAccess, EmployeeAccess, requireHomeManager, resolveHotelId } from './access';
 import { revokeAllSessions } from './tokens';
+import { setOpeningBalance } from './allowance';
 
 export interface EmployeeInput {
   firstName: string;
@@ -23,6 +24,9 @@ export interface EmployeeInput {
   attendanceRequired?: boolean;
   payType?: 'salary' | 'hourly';
   publicHolidaysOff?: boolean;
+  /** with a termination: delete roster entries after the termination date instead of refusing */
+  removeFutureEntries?: boolean;
+  vacation?: { year?: number; vacationDaysPerYear: number; carriedOverDays: number; remainingThisYearDays?: number; carryOverExpiresOn?: string | null };
   homeHotelId: number;
   hotelIds?: number[];
   departmentIds?: number[];
@@ -30,54 +34,66 @@ export interface EmployeeInput {
 
 const today = () => todayIn('Europe/Berlin', now());
 
-async function assignmentsOf(db: Db, employeeId: number) {
-  return rows(
+type DtoView = { full: boolean; showBirthDate?: boolean };
+
+/** Builds employee DTOs for many employees with two queries (assignments, departments) instead of two per employee. */
+async function buildEmployeeDtos(db: Db, list: any[], viewOf: (e: any) => DtoView): Promise<any[]> {
+  if (list.length === 0) return [];
+  const ids = list.map((e) => e.id);
+  const assignmentRows = await rows(
     db,
-    `SELECT eh.hotel_id, eh.is_home, eh.assigned_on, eh.unassigned_on, h.name
+    `SELECT eh.employee_id, eh.hotel_id, eh.is_home, h.name
        FROM employee_hotels eh JOIN hotels h ON h.id = eh.hotel_id
-      WHERE eh.employee_id = $1 ORDER BY eh.is_home DESC, eh.hotel_id`,
-    [employeeId],
+      WHERE eh.employee_id = ANY($1::bigint[]) AND eh.unassigned_on IS NULL
+      ORDER BY eh.is_home DESC, eh.hotel_id`,
+    [ids],
   );
+  const deptRows = await rows(
+    db,
+    `SELECT ed.employee_id, d.id, d.name, d.color, d.hotel_id
+       FROM employee_departments ed JOIN departments d ON d.id = ed.department_id
+      WHERE ed.employee_id = ANY($1::bigint[]) AND d.deleted_at IS NULL
+      ORDER BY d.hotel_id, d.name`,
+    [ids],
+  );
+  return list.map((e) => {
+    const view = viewOf(e);
+    const assignments = assignmentRows.filter((a) => a.employee_id === e.id);
+    const hotelIds = assignments.map((a) => a.hotel_id);
+    const home = assignments.find((a) => a.is_home);
+    const dto: any = {
+      id: e.id,
+      employeeNumber: e.employee_number,
+      firstName: e.first_name,
+      lastName: e.last_name,
+      status: e.status,
+      employmentType: e.employment_type,
+      hiredOn: e.hired_on,
+      attendanceRequired: e.attendance_required,
+      publicHolidaysOff: e.public_holidays_off,
+      workWeekdays: e.work_weekdays,
+      terminatedOn: e.terminated_on,
+      homeHotelId: home ? home.hotel_id : null,
+      hotels: assignments.map((a) => ({ id: a.hotel_id, name: a.name, isHome: a.is_home })),
+      departments: deptRows
+        .filter((d) => d.employee_id === e.id && hotelIds.includes(d.hotel_id))
+        .map((d) => ({ id: d.id, name: d.name, color: d.color, hotelId: d.hotel_id })),
+      updatedAt: e.updated_at,
+    };
+    if (view.full) {
+      dto.email = e.email;
+      dto.phone = e.phone;
+      dto.hourlyRate = e.hourly_rate;
+      dto.payType = e.pay_type;
+      dto.anonymizedAt = e.anonymized_at;
+    }
+    if (view.showBirthDate ?? view.full) dto.birthDate = e.birth_date;
+    return dto;
+  });
 }
 
-export async function employeeDto(db: Db, e: any, opts: { full: boolean; showBirthDate?: boolean }) {
-  const t = today();
-  const assignments = (await assignmentsOf(db, e.id)).filter((a) => !a.unassigned_on);
-  void t;
-  const hotelIds = assignments.map((a) => a.hotel_id);
-  const depts = await rows(
-    db,
-    `SELECT d.id, d.name, d.color, d.hotel_id FROM employee_departments ed JOIN departments d ON d.id = ed.department_id
-      WHERE ed.employee_id = $1 AND d.deleted_at IS NULL AND d.hotel_id = ANY($2::bigint[]) ORDER BY d.hotel_id, d.name`,
-    [e.id, hotelIds],
-  );
-  const home = assignments.find((a) => a.is_home);
-  const dto: any = {
-    id: e.id,
-    employeeNumber: e.employee_number,
-    firstName: e.first_name,
-    lastName: e.last_name,
-    status: e.status,
-    employmentType: e.employment_type,
-    hiredOn: e.hired_on,
-    attendanceRequired: e.attendance_required,
-    publicHolidaysOff: e.public_holidays_off,
-    workWeekdays: e.work_weekdays,
-    terminatedOn: e.terminated_on,
-    homeHotelId: home ? home.hotel_id : null,
-    hotels: assignments.map((a) => ({ id: a.hotel_id, name: a.name, isHome: a.is_home })),
-    departments: depts.map((d) => ({ id: d.id, name: d.name, color: d.color, hotelId: d.hotel_id })),
-    updatedAt: e.updated_at,
-  };
-  if (opts.full) {
-    dto.email = e.email;
-    dto.phone = e.phone;
-    dto.hourlyRate = e.hourly_rate;
-    dto.payType = e.pay_type;
-    dto.anonymizedAt = e.anonymized_at;
-  }
-  if (opts.showBirthDate ?? opts.full) dto.birthDate = e.birth_date;
-  return dto;
+export async function employeeDto(db: Db, e: any, opts: DtoView) {
+  return (await buildEmployeeDtos(db, [e], () => opts))[0];
 }
 
 export function viewOf(access: EmployeeAccess) {
@@ -88,6 +104,21 @@ function validateBirthDate(birthDate: string | null | undefined) {
   if (!birthDate) return;
   if (ageOn(birthDate, today()) < 15) {
     throw new AppError('VALIDATION_ERROR', { details: [{ field: 'birthDate', issue: 'employees must be at least 15 years old' }] });
+  }
+}
+
+/** Departments cannot be taken away from an employee who still has future roster entries on shifts of that department. */
+async function assertDepartmentsNotInUse(db: Db, employeeId: number, newDepartmentIds: number[]) {
+  const inUse = await rows(
+    db,
+    `SELECT DISTINCT sh.department_id FROM schedules s JOIN shifts sh ON sh.id = s.shift_id
+      WHERE s.employee_id = $1 AND s.date >= $2::date AND s.entry_type = 'shift' AND NOT (sh.department_id = ANY($3::bigint[]))`,
+    [employeeId, today(), newDepartmentIds],
+  );
+  if (inUse.length > 0) {
+    throw new AppError('RESOURCE_IN_USE', {
+      details: inUse.map((r) => ({ field: 'departmentIds', issue: `future roster entries exist for department ${r.department_id}`, departmentId: r.department_id })),
+    });
   }
 }
 
@@ -121,14 +152,14 @@ export async function listEmployees(
       WHERE ${where} ORDER BY e.last_name, e.first_name, e.id LIMIT $6 OFFSET $7`,
     [...params, q.limit, (q.page - 1) * q.limit],
   );
-  const data = [];
-  for (const e of list) {
-    const homeRow = await maybeOne(db, 'SELECT hotel_id FROM employee_hotels WHERE employee_id = $1 AND is_home', [e.id]);
-    const full = ctx.role === 'admin' || (!!homeRow && ctx.hotelIds.includes(homeRow.hotel_id));
-    const dto = await employeeDto(db, e, { full });
-    dto.isHome = e.assignment_is_home;
-    data.push(dto);
-  }
+  const homes = new Map(
+    (await rows(db, 'SELECT employee_id, hotel_id FROM employee_hotels WHERE employee_id = ANY($1::bigint[]) AND is_home', [list.map((e) => e.id)])).map((r) => [r.employee_id, r.hotel_id]),
+  );
+  // managers of the home hotel (and admins) get the full view, everyone else the reduced one (no rate, no contact data)
+  const data = await buildEmployeeDtos(db, list, (e) => ({ full: ctx.role === 'admin' || ctx.hotelIds.includes(homes.get(e.id) as number) }));
+  data.forEach((dto, i) => {
+    dto.isHome = list[i].assignment_is_home;
+  });
   return { data, total };
 }
 
@@ -165,6 +196,16 @@ export async function createEmployee(db: Db, ctx: AuthContext, input: EmployeeIn
   }
   await insertDepartments(db, e.id, departmentIds);
   await db.query('INSERT INTO employee_work_targets (employee_id) VALUES ($1)', [e.id]);
+  if (input.vacation) {
+    const v = input.vacation;
+    await setOpeningBalance(db, e.id, {
+      year: v.year ?? Number(today().slice(0, 4)),
+      vacationDaysPerYear: v.vacationDaysPerYear,
+      carriedOverDays: v.carriedOverDays,
+      remainingThisYearDays: v.remainingThisYearDays ?? v.vacationDaysPerYear,
+      carryOverExpiresOn: v.carryOverExpiresOn ?? null,
+    });
+  }
   await audit(db, ctx, {
     action: 'employee.create', entityType: 'employee', entityId: e.id, hotelId: input.homeHotelId,
     after: { status, workWeekdays: e.work_weekdays, employmentType: e.employment_type, payType: e.pay_type, publicHolidaysOff: e.public_holidays_off, hotelIds, departmentIds },
@@ -214,11 +255,32 @@ export async function updateEmployee(db: Db, ctx: AuthContext, id: string | numb
       pick('payType', 'pay_type'), pick('publicHolidaysOff', 'public_holidays_off')],
   );
   if (input.departmentIds) {
+    await assertDepartmentsNotInUse(db, e.id, input.departmentIds);
     await db.query('DELETE FROM employee_departments WHERE employee_id = $1', [e.id]);
     await insertDepartments(db, e.id, [...new Set(input.departmentIds)]);
   }
-  if (updated.status === 'terminated' && updated.terminated_on && updated.terminated_on <= today()) {
-    await deactivateTerminated(db, e.id);
+  if (updated.status === 'terminated' && updated.terminated_on) {
+    // roster entries after the last working day would still count as coverage and block publishing
+    const future = await rows(
+      db,
+      'SELECT id, hotel_id, date, status FROM schedules WHERE employee_id = $1 AND date > $2::date ORDER BY date, id',
+      [e.id, updated.terminated_on],
+    );
+    if (future.length > 0) {
+      if (!input.removeFutureEntries) {
+        throw new AppError('RESOURCE_IN_USE', {
+          details: [{ field: 'status', issue: `${future.length} roster entries after the termination date exist; remove them first or send removeFutureEntries: true`, entries: future.length }],
+        });
+      }
+      await db.query('DELETE FROM schedules WHERE id = ANY($1::bigint[])', [future.map((f) => f.id)]);
+      for (const f of future) {
+        await audit(db, ctx, {
+          action: 'schedule.delete', entityType: 'schedule', entityId: f.id, hotelId: f.hotel_id,
+          before: { date: f.date, status: f.status }, meta: { cause: 'employee_terminated', employeeId: e.id },
+        });
+      }
+    }
+    if (updated.terminated_on <= today()) await deactivateTerminated(db, e.id);
   }
   await audit(db, ctx, {
     action: 'employee.update', entityType: 'employee', entityId: e.id, hotelId: access.homeHotelId,
@@ -325,6 +387,7 @@ export async function putHotels(db: Db, ctx: AuthContext, id: string | number, i
   await db.query('UPDATE employee_hotels SET is_home = true WHERE employee_id = $1 AND hotel_id = $2', [employeeId, input.homeHotelId]);
   if (input.departmentIds) {
     await assertDepartments(db, input.departmentIds, newIds);
+    await assertDepartmentsNotInUse(db, employeeId, input.departmentIds);
     await db.query('DELETE FROM employee_departments WHERE employee_id = $1', [employeeId]);
     await insertDepartments(db, employeeId, [...new Set(input.departmentIds)]);
   }

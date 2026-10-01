@@ -30,6 +30,8 @@ export async function anonymizeEmployee(db: Db, ctx: AuthContext, param: string 
     throw new AppError('RETENTION_NOT_ELAPSED', { details: [{ field: 'terminatedOn', issue: `retention ends on ${elapsedOn}`, retentionEndsOn: elapsedOn }] });
   }
   await deactivateTerminated(db, e.id);
+  // inquiry texts are free text and may contain personal data: erased with the person (messages cascade)
+  await db.query('DELETE FROM inquiries WHERE employee_id = $1', [e.id]);
   await db.query(
     `UPDATE employees SET first_name = 'Former employee', last_name = $2, email = NULL, phone = NULL, hourly_rate = NULL,
             birth_date = NULL, employee_number = NULL, anonymized_at = $3 WHERE id = $1`,

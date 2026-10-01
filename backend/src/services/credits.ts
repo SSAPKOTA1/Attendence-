@@ -29,7 +29,7 @@ export async function creditsFor(db: Db, employeeId: number, from: string, to: s
       ORDER BY d.date`,
     [employeeId, from, to],
   );
-  const emp0 = (await rows(db, 'SELECT public_holidays_off FROM employees WHERE id = $1', [employeeId]))[0];
+  const emp0 = (await rows(db, 'SELECT public_holidays_off, hired_on, terminated_on FROM employees WHERE id = $1', [employeeId]))[0];
   if (list.length === 0 && !emp0?.public_holidays_off) return [];
   const targets = await loadTargets(db, employeeId);
   const emp = (await rows(db, 'SELECT work_weekdays FROM employees WHERE id = $1', [employeeId]))[0];
@@ -57,7 +57,10 @@ export async function creditsFor(db: Db, employeeId: number, from: string, to: s
   }
   if (emp0?.public_holidays_off) {
     const region = home?.holidayRegion ?? 'DE-HE';
-    const holidays = eachDate(from, to).filter((d) => emp.work_weekdays.includes(isoWeekday(d)) && holidayName(region, d) && !seen.has(d));
+    const holidays = eachDate(from, to).filter(
+      // paid holidays only while employed: not before the hiring date, not after the termination date
+      (d) => emp.work_weekdays.includes(isoWeekday(d)) && (!emp0.hired_on || d >= emp0.hired_on) && (!emp0.terminated_on || d <= emp0.terminated_on) && holidayName(region, d) && !seen.has(d),
+    );
     if (holidays.length > 0) {
       const worked = new Set(
         (

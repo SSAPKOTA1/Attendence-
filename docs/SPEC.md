@@ -76,6 +76,35 @@ Clock-in on a **shared hotel tablet** with **name + PIN only**; **automatic dedu
 | Supplements | New **Saturday** supplement (`saturdayMinutes`, wage type `saturday`). The unpaid break is **deducted automatically** from night, Saturday, Sunday and holiday minutes, proportionally (worked ÷ gross) because the break time of day is not recorded |
 | Shift design | Shift templates are designed in the app (`POST/PATCH/DELETE /shifts`) by **admins only** (1.9); managers read them and assign them in the roster; the seed shifts are examples only |
 
+### 1.12 Unplanned clock-in: reason and supervisor approval (owner decision)
+| Topic | Rule |
+|---|---|
+| What is "unplanned" | A kiosk `clock_in` for which there is no published, not yet used shift **at this hotel** whose window contains now (R13.5): no shift, a shift only at another hotel, outside the 2 h early window, or during an approved absence |
+| Reason | `POST /kiosk/punch` with `action: clock_in` must carry `reason` (3–500 characters) when unplanned, else `422 UNPLANNED_REASON_REQUIRED`. The refused punch does **not** burn the punch token (the tablet asks for the reason and retries within the 60 s). `POST /kiosk/verify` answers `reasonRequiredForClockIn` so the tablet can ask first. A reason sent for a planned shift is ignored |
+| Approval state | `time_entries.approval_status`: `not_required` (planned shifts, manager-created entries), `pending` (unplanned, from clock-in), `approved`, `rejected`. Fields: `unplannedReason`, `approvedById`, `approvedAt`, `approvalNote` |
+| Hours | Only `closed` entries that are `not_required` or `approved` count as worked hours: time account, work hours on the dashboard, payroll/DATEV, analytics hours. **Pending** entries show in `payroll-export` as `unapprovedEntries` (JSON warning `entries_pending_approval`, header `X-Warnings`) and in analytics as `entriesAwaitingApproval`, because a decision is still due. **Rejected** entries are final: they contribute no hours anywhere (their `workedMinutes` is reported as `0`, also in the attendance export), are not an open item and raise no warning; only their anomalies still count in analytics |
+| Decision | `PATCH /attendance/:id/approval { status: approved | rejected, note }` (AT12): managers of the entry's hotel and admins. The entry must be closed (a forgotten clock-out is first closed by a correction). Rejection needs a note. Decisions can be revised (approved ⇄ rejected). Nobody decides their own hours except an admin. The payroll period lock applies (`423 PERIOD_LOCKED`, admin with a note overrides, audited) |
+| Notifications | `time_approval_requested` to the hotel's managers when the hours become final (clock-out); `time_approval_decided` to the employee (ids only, never the note); live board `awaitingApproval` |
+
+
+### 1.14 Vacation at onboarding and automatic carry-over (owner decision)
+- **Onboarding:** `POST /employees` accepts `vacation: { year?, vacationDaysPerYear, carriedOverDays (left from last year), remainingThisYearDays (left of this year's own entitlement), carryOverExpiresOn? }`. The days already taken before the employee entered the system are stored as `alreadyTakenDays = vacationDaysPerYear − remainingThisYearDays` and count as used (carry-over is consumed first). `remainingDays = vacationDaysPerYear + carriedOverDays − usedDays`.
+- **Automatic carry-over:** a later year's allowance is created from the previous year: same `vacationDaysPerYear`, `carriedOverDays` = what is left of the previous year (never negative, capped by hotel setting `absence.maxCarryOverDays`, default no cap), expiring on `absence.carryOverExpiresOn` (`MM-DD`, default `03-31`, `null` = never). It is recalculated on every read, so later approvals or cancellations in the previous year change it. Unused carry-over lapses after the expiry date (R9).
+- **Manual override:** `PUT /employees/:id/vacation-allowance` with a number in `carriedOverDays` fixes it by hand; `null` returns to automatic; `alreadyTakenDays` is writable. Allowance responses add `carryOverAutomatic` and `alreadyTakenDays`. Migration `0006`.
+
+### 1.13 Forgotten clock-out on a planned shift (owner decision)
+If an employee forgets to clock out of a **planned** shift, the hourly job closes the entry once `attendance.autoCloseAfterPlannedEndHours` (default 5, `null` = off) have passed after the planned shift end: `clockOutAt` = planned end, `breakMinutes` = the shift's scheduled break (capped below the gross time), `sourceOut` = `system`, anomaly `auto_closed_planned_hours`, managers are notified (`needs_review_entry`, `anomaly: auto_closed`) and the audit log records `attendance.auto_close`. The credited hours run from the real clock-in to the planned end. Not auto-closed: unplanned entries (no planned hours exist; they become `needs_review` after `needsReviewAfterHours`), entries clocked in after the planned end, and entries whose day is in a locked period. A manager can still correct the entry (AT corrections). This replaces the "never auto-closed" part of R13.7 for planned shifts.
+
+### 1.11 Data-integrity rules found by the audit
+| Rule | Behaviour |
+|---|---|
+| Shift in use | Start time, end time, break and department of a shift that any roster entry references can no longer be changed (`409 RESOURCE_IN_USE`); only the name can. Create a new shift for different times. This keeps rosters, rest-period checks and past payroll months stable |
+| Departments of an employee | Cannot be removed while the employee has future roster entries on shifts of that department (`409 RESOURCE_IN_USE`) |
+| Termination | Setting an employee `terminated` is refused while roster entries after the termination date exist; `removeFutureEntries: true` deletes them (audited). The entries on the termination date itself stay |
+| Paid public holidays | Credited only between `hiredOn` and `terminatedOn` |
+| Anonymisation | Also deletes the employee's inquiries (free text may contain personal data) |
+| Daylight saving | A local time that occurs twice (02:00–02:59 on the autumn change) means the later occurrence, exactly as in PostgreSQL's `AT TIME ZONE`, so the service and the database trigger always agree |
+
 ### 1.10 Adding and deleting employees: admin only
 Creating (`E3`) and deleting (`E5`) employees is restricted to admins (`403 FORBIDDEN` for managers). Managers of the home hotel still edit master data, targets, hotel assignments, PINs and absences.
 
@@ -170,7 +199,7 @@ Creating, editing and deleting shift templates (`S2`–`S4`) is restricted to ad
   "portal":     { "planVisibility": "own_departments", "nameFormat": "first_last_initial" },
   "wishes":     { "minLeadDays": null },
   "attendance": { "breakMode": "auto", "earlyClockInMinutes": 30, "lateToleranceMinutes": 5,
-                  "overtimeToleranceMinutes": 15, "needsReviewAfterHours": 14,
+                  "overtimeToleranceMinutes": 15, "needsReviewAfterHours": 14, "autoCloseAfterPlannedEndHours": 5,
                   "kioskAllowedIps": [], "pinMaxAttempts": 5, "pinLockMinutes": 15 },
   "absence":    { "sickNoteRequiredFromDay": 4, "sickCreditMaxDays": 42 },
   "payroll":    { "nightFrom": "23:00", "nightTo": "06:00",
@@ -279,7 +308,7 @@ Absences belong to the **employee**: once approved they block rostering at **eve
 - before `carryOverExpiresOn` (or if none): `remaining = vacationDaysPerYear + carriedOverDays − usedDays`
 - after it: `remaining = vacationDaysPerYear + min(carriedOverDays, usedOnOrBeforeExpiry) − usedDays` (unused carry-over lapses).
 
-Creating annual leave needing more than `remaining` in any affected year → `422 ALLOWANCE_EXCEEDED` (details per year). A request spanning New Year simply consumes days from both years. A missing allowance row is auto-created with 30 days. `PUT .../vacation-allowance` returns warning `below_statutory_minimum` for a minor when `vacationDaysPerYear` is below `ceil(minimumWerktage × workWeekdays / 6)`, where the minimum is 30 / 27 / 25 Werktage if the employee is under 16 / 17 / 18 at the start of the year (JArbSchG).
+Creating annual leave needing more than `remaining` in any affected year → `422 ALLOWANCE_EXCEEDED` (details per year). A request spanning New Year simply consumes days from both years. A missing allowance row is auto-created: 30 days if the employee has no earlier year, otherwise the previous year's yearly days plus automatic carry-over (SPEC 1.14). `PUT .../vacation-allowance` returns warning `below_statutory_minimum` for a minor when `vacationDaysPerYear` is below `ceil(minimumWerktage × workWeekdays / 6)`, where the minimum is 30 / 27 / 25 Werktage if the employee is under 16 / 17 / 18 at the start of the year (JArbSchG).
 
 ### R10. Wishes
 - **Shift wish** (`kind: prefer | avoid`, priority 1–3): `shiftId` may be omitted only with `avoid`, meaning "I want this day off". Rejected for past dates, for dates where the employee already has an entry (409) or approved absence (422). One pending wish per employee+date+shift.
@@ -314,7 +343,7 @@ Creating annual leave needing more than `remaining` in any affected year → `42
 
 **R13.6 Breaks.** `auto` (default): at `clock_out`, `breakMinutes` = the shift's scheduled break if gross time ≥ 6 h, else 0; unscheduled work uses `legal.breakRules` by gross time. `recorded`: sum of recorded breaks; missing/short → `missing_break`. On a split day the test uses the day's total working time and counts gaps of at least 15 minutes between parts as break time; minors follow R18.
 
-**R13.7 Forgotten clock-out.** An hourly job sets entries open longer than `needsReviewAfterHours` to `needs_review`. They are never auto-closed with invented times; a manager closes them through a correction.
+**R13.7 Forgotten clock-out.** An hourly job sets entries open longer than `needsReviewAfterHours` to `needs_review`. Unplanned entries are never auto-closed with invented times; a manager closes them through a correction. Planned-shift entries: see 1.13.
 
 **R13.8 Corrections.** Entries are never edited in place. An employee (web login) **requests** a correction with a mandatory reason; a manager approves/rejects. A manager's own change is recorded as a correction row that is created already `approved` (reason mandatory). Approval snapshots the original values on the correction row and then updates the entry; the audit log records both. A manager can also add a missed day manually (`POST /attendance`, source `manager`, reason mandatory).
 
@@ -346,7 +375,7 @@ Creating annual leave needing more than `remaining` in any affected year → `42
 
 ### R17. Notifications
 - In-app notifications for every user; e-mail optional per kind if the user has an e-mail address and the preference allows it. Users without e-mail receive in-app notifications only.
-- **Kinds and recipients:** `roster_published` (employees with published entries in the range, one per publish), `roster_entry_changed` / `roster_entry_removed` (employee, published entries only, immediate, `urgent` inside the notice window), `absence_decided`, `wish_decided`, `correction_decided`, `inquiry_reply` (employee); `inquiry_new`, `absence_requested`, `wish_submitted`, `correction_requested`, `needs_review_entry`, `sick_reported` (managers whose access set contains the relevant hotel; absences go to the home hotel).
+- **Kinds and recipients:** `roster_published` (employees with published entries in the range, one per publish), `roster_entry_changed` / `roster_entry_removed` (employee, published entries only, immediate, `urgent` inside the notice window), `absence_decided`, `wish_decided`, `correction_decided`, `inquiry_reply` (employee); `inquiry_new`, `absence_requested`, `wish_submitted`, `correction_requested`, `needs_review_entry`, `sick_reported`, `time_approval_requested` (managers whose access set contains the relevant hotel; absences go to the home hotel); `time_approval_decided` (employee).
 - **Content:** `kind`, `params` (ids and dates only, never health details), `entityType`, `entityId`; the client renders the text in the user's language. E-mails carry a generic text and a link, never the content.
 - **Defaults:** e-mail on for entry changed/removed, decisions, replies and `sick_reported`; off for the rest. A job sends due e-mails every minute (retry 3 times).
 
@@ -410,7 +439,7 @@ Creating annual leave needing more than `remaining` in any affected year → `42
 | Shift templates (create/edit/delete) | ✗ | ✗ | ✓ |
 | Add / delete employees | ✗ | ✗ | ✓ |
 | Roster: create/edit/delete/bulk/copy/publish, see drafts | ✗ | ✓ | ✓ |
-| Approve/reject absences, wishes, corrections; manual time entries | ✗ | ✓ | ✓ |
+| Approve/reject absences, wishes, corrections, hours of unplanned work; manual time entries | ✗ | ✓ | ✓ |
 | Kiosk pairing/devices, period lock (forward only) | ✗ | ✓ | ✓ |
 | Analytics, live board, audit log | ✗ | ✓ | ✓ |
 | Users: create/invite/disable staff in own hotels, hand-over and reset links | ✗ | ✓ | ✓ |
@@ -523,6 +552,7 @@ Role: **P** public, **S** staff and up, **M** manager and up, **A** admin, **D**
 | AT9 | PUT | /hotels/:id/attendance-lock | M | 6 |
 | AT10 | GET | /attendance/export | M | 6 |
 | AT11 | GET | /hotels/:id/payroll-export | M | 6 |
+| AT12 | PATCH | /attendance/:id/approval | M | 6 |
 | E13 | GET | /employees/:id/time-account | S | 6 |
 | W1 | GET | /shift-wishes | S | 7 |
 | W2 | POST | /employees/:id/shift-wishes | S | 7 |
@@ -593,7 +623,7 @@ POST /employees/1/time-offs   same body + { "reason": "Autumn break", "unassignC
 ```
 (The skipped-holiday line is only an illustration of the shape.) Sick leave: same endpoint with `type: "sick_leave"` and **no `reason`** (400 if sent). Approve: `PATCH /time-offs/5 { "status": "approved", "unassignConflicts": true }`; certificate: `PATCH { "medicalCertificateReceived": true }`.
 
-**Allowance (E9):** `{ employeeId, year, vacationDaysPerYear, carriedOverDays, carryOverExpiresOn, usedDays, pendingDays, remainingDays }`
+**Allowance (E9):** `{ employeeId, year, vacationDaysPerYear, carriedOverDays, carryOverExpiresOn, carryOverAutomatic, alreadyTakenDays, usedDays, pendingDays, remainingDays }`
 
 **Roster entry create / dry run (C4 / C3)**: same body, same response; C3 never writes.
 ```json
@@ -637,10 +667,10 @@ GET /kiosk/roster?search=  (X-Device-Token)
 
 POST /kiosk/verify { "employeeId": 1, "pin": "483920" }
 200 { "punchToken": "…60 s, single use…", "displayName": "Maria G.", "status": "not_in",
-      "allowedActions": [ "clock_in" ], "todayShifts": [ ... ] }
+      "allowedActions": [ "clock_in" ], "reasonRequiredForClockIn": false, "todayShifts": [ ... ] }
 401 INVALID_PIN { "attemptsLeft": 3 }      423 PIN_LOCKED { "lockedUntil": "..." }
 
-POST /kiosk/punch  { "punchToken": "...", "action": "clock_in" }
+POST /kiosk/punch  { "punchToken": "...", "action": "clock_in", "reason": "only when unplanned (1.12)" }
 201 { "timeEntryId": 881, "action": "clock_in", "at": "2026-10-05T04:02:03Z", "displayName": "Maria G.",
       "anomalies": [ ], "workedMinutesToday": 0 }
 ```
@@ -975,7 +1005,7 @@ Rule: business rules live in `services/` and `domain/`; controllers hold no logi
 - **Time-off:** id, employeeId, type, startDate, endDate, startHalfDay, endHalfDay, timeOffDays (computed), reason, status, medicalCertificateReceived, decidedById, decidedAt, conflicts[]
 - **Roster entry:** id, status (`draft`|`published`), entryType (`shift`|`off`), employee, shift, offLabel, date, paidHoursAssigned, currentWeekHours, currentMonthHours, weeklyTarget, monthlyTarget, restPeriodHours, warnings[], overrideReason, publishedAt
 - **Warning/anomaly:** type, severity (`warning`|`info`), message, plus context
-- **Time entry:** id, employeeId, scheduleId, status (`open`|`closed`|`needs_review`), clockInAt, clockOutAt, breakMinutes, workedMinutes, sourceIn, sourceOut, anomalies[], note, corrections[]
+- **Time entry:** id, employeeId, scheduleId, status (`open`|`closed`|`needs_review`), clockInAt, clockOutAt, breakMinutes, workedMinutes, sourceIn, sourceOut (`kiosk`|`manager`|`system`), anomalies[], note, corrections[]
 - **Correction:** id, timeEntryId, proposedClockInAt, proposedClockOutAt, proposedBreakMinutes, reason, status, decisionNote
 - **Kiosk device:** id, name, status (`active`|`revoked`), lastSeenAt
 - **Shift wish:** id, employeeId, date, shiftId|null, kind (`prefer`|`avoid`), priority (1 high–3 low), reason, status, decisionNote
@@ -1077,6 +1107,7 @@ Each phase ends with migrations applied, endpoints implemented, listed tests gre
 | LEAVE_BLACKOUT | 422 | R22 |
 | WISH_DEADLINE_PASSED | 422 | R10 |
 | OVERRIDE_REASON_REQUIRED | 422 | R18 (minor warning saved without `overrideReason`) |
+| UNPLANNED_REASON_REQUIRED | 422 | 1.12 (clock-in without a planned shift and without a reason) |
 | PAYROLL_MAPPING_INCOMPLETE | 422 | R21 (DATEV consultant/client number, templates or wage types missing) |
 | EMPLOYEE_NOT_ASSIGNED_TO_HOTEL | 422 | R2 (DB trigger message "not assigned to this hotel" maps here) |
 | SCHEDULE_DATE_IN_PAST | 422 | R2 |

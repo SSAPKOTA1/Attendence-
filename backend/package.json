@@ -16,7 +16,11 @@
     "migrate": "tsx scripts/migrate.ts",
     "seed": "tsx scripts/seed.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "loadtest": "tsx scripts/loadtest.ts",
+    "migrate:prod": "node dist/scripts/migrate.js",
+    "bootstrap": "tsx scripts/bootstrap.ts",
+    "bootstrap:prod": "node dist/scripts/bootstrap.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -49,6 +53,7 @@
     "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.23.1",
     "@types/supertest": "^6.0.3",
+    "@vitest/coverage-v8": "^5.0.3",
     "eslint": "^9.39.5",
     "supertest": "^7.3.0",
     "tsx": "^4.23.15",

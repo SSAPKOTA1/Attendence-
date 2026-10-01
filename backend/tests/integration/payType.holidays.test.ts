@@ -67,4 +67,16 @@ describe('SPEC 1.8: salaried vs hourly, public holidays off per employee', () =>
     const s2 = await M1().post('/schedules', { hotelId: w.h1, entryType: 'shift', employeeId: other, shiftId: w.late, date: '2026-12-25' });
     expect(s2.body.warnings.map((x: any) => x.type)).not.toContain('public_holiday_off');
   });
+
+  it('paid holiday credit only counts while the employee is employed', async () => {
+    const week = '/work-summary?from=2026-12-21&to=2026-12-27';
+    const credited = async () => (await M1().get(`/employees/${w.maria}${week}`)).body.creditedHours;
+    expect(await credited()).toBe(8);
+    await M1().patch(`/employees/${w.maria}`, { hiredOn: '2026-12-26' });
+    expect(await credited()).toBe(0); // hired after the holiday
+    await M1().patch(`/employees/${w.maria}`, { hiredOn: '2026-12-25' });
+    expect(await credited()).toBe(8); // hired on the holiday itself
+    await M1().patch(`/employees/${w.maria}`, { hiredOn: null, terminatedOn: '2026-12-24', status: 'terminated' });
+    expect(await credited()).toBe(0); // left before the holiday
+  });
 });

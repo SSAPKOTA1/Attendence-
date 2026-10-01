@@ -31,6 +31,11 @@ export function createApp(): express.Express {
     cors({
       origin: (origin, cb) => cb(null, !origin || config.corsOrigins.includes(origin)),
       credentials: true,
+      // without this a browser front end cannot read ETag (If-Match concurrency), Location, or export warnings
+      exposedHeaders: ['ETag', 'Location', 'X-Request-Id', 'X-Warnings', 'Content-Disposition'],
+      allowedHeaders: ['Authorization', 'Content-Type', 'Accept-Language', 'If-Match', 'X-Client', 'X-Requested-With', 'X-Device-Token', 'X-Request-Id'],
+      methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+      maxAge: 600,
     }),
   );
   app.use(express.json({ limit: '100kb' }));

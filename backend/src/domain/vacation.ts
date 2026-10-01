@@ -7,6 +7,7 @@ export function remainingVacation(input: {
   usedOnOrBeforeExpiry: number;
   today: string;
 }): number {
+  // usedDays / usedOnOrBeforeExpiry already include the days taken before onboarding (SPEC 1.14)
   const { vacationDaysPerYear, carriedOverDays, carryOverExpiresOn, usedDays, usedOnOrBeforeExpiry, today } = input;
   if (!carryOverExpiresOn || today <= carryOverExpiresOn) {
     return vacationDaysPerYear + carriedOverDays - usedDays;

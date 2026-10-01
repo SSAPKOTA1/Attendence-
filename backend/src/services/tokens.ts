@@ -21,7 +21,12 @@ export async function verifySecret(secret: string, hash: string | null): Promise
   return bcrypt.compare(secret, hash);
 }
 
-const DUMMY_HASH = bcrypt.hashSync('dummy-password-for-timing', 4);
+// Must use the SAME cost as real hashes: with a cheaper dummy, "unknown login" answers measurably faster than
+// "wrong password" and the login form becomes an account-existence oracle.
+const DUMMY_HASH = bcrypt.hashSync('dummy-password-for-timing', config.BCRYPT_COST);
+export const dummyHashRounds = (): number => bcrypt.getRounds(DUMMY_HASH);
+
+/** Spends the time of one real password/PIN check (for unknown accounts, locked/disabled ones, unassigned employees). */
 export async function burnTime(secret: string): Promise<void> {
   await bcrypt.compare(secret, DUMMY_HASH);
 }
